@@ -532,7 +532,7 @@ std::string HelpMessage(HelpMessageMode mode)
 
     if (mode == HMM_BITCOIND) {
         strUsage += HelpMessageGroup(_("Metrics Options (only if -daemon and -printtoconsole are not set):"));
-        strUsage += HelpMessageOpt("-showmetrics", _("Show metrics on stdout (default: 1 if running in a console, 0 otherwise)"));
+        strUsage += HelpMessageOpt("-showmetrics", _("Show metrics on stdout (default: 1)"));
         strUsage += HelpMessageOpt("-metricsui", _("Set to 1 for a persistent metrics screen, 0 for sequential metrics output (default: 1 if running in a console, 0 otherwise)"));
         strUsage += HelpMessageOpt("-metricsrefreshtime", strprintf(_("Number of seconds between metrics refreshes (default: %u if running in a console, %u otherwise)"), 1, 600));
     }
@@ -1569,7 +1569,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         "version", CLIENT_BUILD.c_str());
 
     if ((chainparams.NetworkIDString() != "regtest") &&
-            GetBoolArg("-showmetrics", false) &&
+            GetBoolArg("-showmetrics", true) &&
             !fPrintToConsole && !GetBoolArg("-daemon", false)) {
         // Start the persistent metrics interface
         ConnectMetricsScreen();
