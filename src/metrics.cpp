@@ -543,6 +543,63 @@ int printStats(MetricsStats stats, bool isScreen, bool mining)
 static int getCurrentDonationPercentage();
 static std::string getCurrentDonationAddress();
 
+int printWalletStatus()
+{
+    int lines = 0;
+
+    // Wallet Balance Box
+    drawBoxTop("WALLET");
+    lines++;
+
+    if (pwalletMain) {
+        CAmount immature = pwalletMain->GetImmatureBalance(std::nullopt);
+        CAmount mature = pwalletMain->GetBalance(std::nullopt);
+        std::string units = Params().CurrencyUnits();
+
+        drawRow("Mature Balance", strprintf("%s %s", FormatMoney(mature), units.c_str()));
+        lines++;
+        drawRow("Immature Balance", strprintf("%s %s", FormatMoney(immature), units.c_str()));
+        lines++;
+
+        // Show blocks mined if any
+        int blocksMined = minedBlocks.get();
+        if (blocksMined > 0) {
+            int orphaned = 0;
+            {
+                LOCK2(cs_main, cs_metrics);
+                boost::strict_lock_ptr<std::list<uint256>> u = trackedBlocks.synchronize();
+
+                // Update orphaned block count
+                std::list<uint256>::iterator it = u->begin();
+                while (it != u->end()) {
+                    auto hash = *it;
+                    if (mapBlockIndex.count(hash) > 0 &&
+                            chainActive.Contains(mapBlockIndex[hash])) {
+                        it++;
+                    } else {
+                        it = u->erase(it);
+                    }
+                }
+
+                orphaned = blocksMined - u->size();
+            }
+
+            drawRow("Blocks Mined", strprintf("%d (orphaned: %d)", blocksMined, orphaned));
+            lines++;
+        }
+    } else {
+        drawRow("Status", "Wallet not loaded");
+        lines++;
+    }
+
+    drawBoxBottom();
+    lines++;
+    std::cout << std::endl;
+    lines++;
+
+    return lines;
+}
+
 int printMiningStatus(bool mining)
 {
 #ifdef ENABLE_MINING
@@ -563,13 +620,6 @@ int printMiningStatus(bool mining)
             CAmount blockReward = Params().GetConsensus().GetBlockSubsidy(nHeight);
             drawRow("Block Reward", FormatMoney(blockReward));
             lines++;
-
-            // Show blocks mined
-            int blocksMined = minedBlocks.get();
-            if (blocksMined > 0) {
-                drawRow("Blocks Mined", strprintf("%d", blocksMined));
-                lines++;
-            }
         } else {
             bool fvNodesEmpty;
             {
@@ -653,48 +703,6 @@ int printMetrics(size_t cols, bool mining)
     if (mining && loaded) {
         std::cout << "- " << strprintf(_("You have completed %d RandomX hashes."), ehSolverRuns.get()) << std::endl;
         lines++;
-
-        int mined = 0;
-        int orphaned = 0;
-        CAmount immature {0};
-        CAmount mature {0};
-        {
-            LOCK2(cs_main, cs_metrics);
-            boost::strict_lock_ptr<std::list<uint256>> u = trackedBlocks.synchronize();
-
-            // Update orphaned block count
-            std::list<uint256>::iterator it = u->begin();
-            while (it != u->end()) {
-                auto hash = *it;
-                if (mapBlockIndex.count(hash) > 0 &&
-                        chainActive.Contains(mapBlockIndex[hash])) {
-                    it++;
-                } else {
-                    it = u->erase(it);
-                }
-            }
-
-            mined = minedBlocks.get();
-            orphaned = mined - u->size();
-        }
-
-        // Get balance from wallet API
-        if (pwalletMain) {
-            immature = pwalletMain->GetImmatureBalance(std::nullopt);
-            mature = pwalletMain->GetBalance(std::nullopt);
-        }
-
-        if (mined > 0) {
-            std::string units = Params().CurrencyUnits();
-            std::cout << "- " << strprintf(_("You have mined %d blocks!"), mined) << std::endl;
-            std::cout << "  "
-                      << strprintf(_("Orphaned: %d blocks, Immature: %u %s, Mature: %u %s"),
-                                     orphaned,
-                                     FormatMoney(immature), units,
-                                     FormatMoney(mature), units)
-                      << std::endl;
-            lines += 2;
-        }
     }
     std::cout << std::endl;
 
@@ -1044,6 +1052,7 @@ void ThreadShowMetricsScreen()
 
         if (loaded) {
             lines += printStats(metricsStats.value(), isScreen, mining);
+            lines += printWalletStatus();
             lines += printMiningStatus(mining);
         }
         lines += printMetrics(cols, mining);
