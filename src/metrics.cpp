@@ -640,8 +640,17 @@ int printMiningStatus(bool mining)
         int donationPct = getCurrentDonationPercentage();
         if (donationPct > 0) {
             std::string donationAddr = getCurrentDonationAddress();
-            std::string shortAddr = donationAddr.substr(0, 10) + "..." + donationAddr.substr(donationAddr.length() - 6);
-            drawRow("Donations", strprintf("\e[1;35m%d%%\e[0m → %s", donationPct, shortAddr.c_str()));
+            if (!donationAddr.empty()) {
+                std::string shortAddr;
+                if (donationAddr.length() > 20) {
+                    shortAddr = donationAddr.substr(0, 10) + "..." + donationAddr.substr(donationAddr.length() - 6);
+                } else {
+                    shortAddr = donationAddr;
+                }
+                drawRow("Donations", strprintf("\e[1;35m%d%%\e[0m → %s", donationPct, shortAddr.c_str()));
+            } else {
+                drawRow("Donations", strprintf("\e[1;35m%d%%\e[0m → \e[1;31mNO ADDRESS SET\e[0m", donationPct));
+            }
             lines++;
         }
     } else {
@@ -876,6 +885,12 @@ static void toggleDonation()
         // Turn off
         updateDonationPercentage(0);
     } else {
+        // Check if donation address is configured
+        std::string donationAddr = getCurrentDonationAddress();
+        if (donationAddr.empty()) {
+            LogPrintf("Cannot enable donations: no -donationaddress configured\n");
+            return;
+        }
         // Turn on with default 5%
         updateDonationPercentage(5);
     }
