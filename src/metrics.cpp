@@ -903,15 +903,18 @@ static void toggleDonation()
     }
 }
 
-// Prompt user for donation percentage
-static void promptForPercentage()
+// Prompt user for donation percentage (with fixed screen positioning)
+static void promptForPercentage(int screenHeight)
 {
 #ifndef WIN32
     enableCanonicalMode();
 #endif
 
-    // Move to bottom of screen for input prompt (avoid corrupting display)
-    std::cout << "\e[999;1H\e[K";  // Move far down and clear line
+    // Use dedicated input area at bottom of screen (3 rows from bottom)
+    int inputRow = screenHeight - 2;
+
+    // Clear input area
+    std::cout << "\e[" << inputRow << ";1H\e[K";
     std::cout << "Enter donation percentage (0-100): " << std::flush;
 
     std::string input;
@@ -921,18 +924,18 @@ static void promptForPercentage()
         int percentage = std::stoi(input);
         if (percentage >= 0 && percentage <= 100) {
             updateDonationPercentage(percentage);
-            std::cout << "\e[K";  // Clear current line
+            std::cout << "\e[" << inputRow << ";1H\e[K";  // Clear and reposition
             if (percentage == 0) {
                 std::cout << "Donations disabled. Press any key..." << std::flush;
             } else {
                 std::cout << "Donation set to " << percentage << "%. Press any key..." << std::flush;
             }
         } else {
-            std::cout << "\e[K";  // Clear current line
+            std::cout << "\e[" << inputRow << ";1H\e[K";
             std::cout << "Invalid percentage. Press any key..." << std::flush;
         }
     } catch (...) {
-        std::cout << "\e[K";  // Clear current line
+        std::cout << "\e[" << inputRow << ";1H\e[K";
         std::cout << "Invalid input. Press any key..." << std::flush;
     }
 
@@ -940,6 +943,9 @@ static void promptForPercentage()
     char c;
     ssize_t result = read(STDIN_FILENO, &c, 1);
     (void)result;  // Ignore return value
+
+    // Clear input area
+    std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
 
 #ifndef WIN32
     enableRawMode();
@@ -962,15 +968,18 @@ static void toggleMining()
     }
 }
 
-// Prompt user for number of mining threads
-static void promptForThreads()
+// Prompt user for number of mining threads (with fixed screen positioning)
+static void promptForThreads(int screenHeight)
 {
 #ifndef WIN32
     enableCanonicalMode();
 #endif
 
-    // Move to bottom of screen for input prompt (avoid corrupting display)
-    std::cout << "\e[999;1H\e[K";  // Move far down and clear line
+    // Use dedicated input area at bottom of screen (3 rows from bottom)
+    int inputRow = screenHeight - 2;
+
+    // Clear input area
+    std::cout << "\e[" << inputRow << ";1H\e[K";
     std::cout << "Enter number of mining threads (1-" << boost::thread::hardware_concurrency() << ", or -1 for all cores): " << std::flush;
 
     std::string input;
@@ -995,14 +1004,14 @@ static void promptForThreads()
             } else {
                 LogPrintf("User set mining threads to %d (will apply when mining starts)\n", threads);
             }
-            std::cout << "\e[K";  // Clear current line
+            std::cout << "\e[" << inputRow << ";1H\e[K";  // Clear and reposition
             std::cout << "Mining threads set to " << threads << ". Press any key..." << std::flush;
         } else {
-            std::cout << "\e[K";  // Clear current line
+            std::cout << "\e[" << inputRow << ";1H\e[K";
             std::cout << "Invalid thread count. Press any key..." << std::flush;
         }
     } catch (...) {
-        std::cout << "\e[K";  // Clear current line
+        std::cout << "\e[" << inputRow << ";1H\e[K";
         std::cout << "Invalid input. Press any key..." << std::flush;
     }
 
@@ -1010,6 +1019,9 @@ static void promptForThreads()
     char c;
     ssize_t result = read(STDIN_FILENO, &c, 1);
     (void)result;  // Ignore return value
+
+    // Clear input area
+    std::cout << "\e[" << inputRow << ";1H\e[K" << std::flush;
 
 #ifndef WIN32
     enableRawMode();
@@ -1050,6 +1062,7 @@ void ThreadShowMetricsScreen()
         // Number of lines that are always displayed
         int lines = 0;
         int cols = 80;
+        int rows = 24;  // Default terminal height
 
         // Get current window size
         if (isTTY) {
@@ -1057,12 +1070,15 @@ void ThreadShowMetricsScreen()
             CONSOLE_SCREEN_BUFFER_INFO csbi;
             if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi) != 0) {
                 cols = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+                rows = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
             }
 #else
             struct winsize w;
             w.ws_col = 0;
-            if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) != -1 && w.ws_col != 0) {
-                cols = w.ws_col;
+            w.ws_row = 0;
+            if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) != -1) {
+                if (w.ws_col != 0) cols = w.ws_col;
+                if (w.ws_row != 0) rows = w.ws_row;
             }
 #endif
         }
@@ -1095,14 +1111,14 @@ void ThreadShowMetricsScreen()
         lines += printInitMessage();
 
         if (isScreen) {
-            // Explain how to exit
+            // Explain how to exit (no newline - avoid scrolling)
             std::cout << "[";
 #ifdef WIN32
             std::cout << _("'junocash-cli.exe stop' to exit");
 #else
             std::cout << _("Press Ctrl+C to exit");
 #endif
-            std::cout << "] [" << _("Set 'showmetrics=0' to hide") << "]" << std::endl;
+            std::cout << "] [" << _("Set 'showmetrics=0' to hide") << "]" << std::flush;
             lines++; // Count the exit message line
         } else {
             // Print delineator
@@ -1122,7 +1138,7 @@ void ThreadShowMetricsScreen()
                 } else if (key == 'T' || key == 't') {
                     // Only allow changing threads if mining or on non-main network
                     if (mining || Params().NetworkIDString() != "main") {
-                        promptForThreads();
+                        promptForThreads(rows);
                         break;  // Force screen refresh
                     }
                 } else if (mining) {
@@ -1134,7 +1150,7 @@ void ThreadShowMetricsScreen()
                         // Only allow changing percentage if donations are active
                         int currentPct = getCurrentDonationPercentage();
                         if (currentPct > 0) {
-                            promptForPercentage();
+                            promptForPercentage(rows);
                             break;  // Force screen refresh
                         }
                     }
