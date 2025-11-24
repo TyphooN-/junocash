@@ -1011,6 +1011,9 @@ void ThreadShowMetricsScreen()
     bool isScreen = GetBoolArg("-metricsui", isTTY);
     int64_t nRefresh = GetArg("-metricsrefreshtime", isTTY ? 1 : 600);
 
+    // Header is 6 lines: box top + 3 centered lines + box bottom + blank line
+    const int HEADER_LINES = 7;  // Position to start content (row 7, line after header)
+
     if (isScreen) {
 #ifdef WIN32
         enableVTMode();
@@ -1021,15 +1024,14 @@ void ThreadShowMetricsScreen()
         }
 #endif
 
-        // Initial screen setup: clear and draw header
-        std::cout << "\e[2J\e[H";  // Clear screen and move to home
+        // Initial screen setup: clear and draw header once
+        std::cout << "\e[2J\e[H" << std::flush;  // Clear screen and move to home
         drawBoxTop("");
         drawCentered("Juno Cash", "\e[1;33m");
         drawCentered("Privacy Money for All", "\e[1;36m");
         drawCentered(FormatFullVersion() + " - " + WhichNetwork() + " - RandomX", "\e[0;37m");
         drawBoxBottom();
         std::cout << std::endl;
-        std::cout << "\e[s" << std::flush;  // Save cursor position (after header)
     }
 
     while (true) {
@@ -1060,8 +1062,8 @@ void ThreadShowMetricsScreen()
         }
 
         if (isScreen) {
-            // Restore cursor to position after header and clear rest of screen
-            std::cout << "\e[u\e[J" << std::flush;
+            // Move to position after header (row 7) and clear rest of screen
+            std::cout << "\e[" << HEADER_LINES << ";1H\e[J" << std::flush;
         }
 
         // Miner status
