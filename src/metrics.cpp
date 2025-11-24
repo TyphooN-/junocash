@@ -856,8 +856,14 @@ static int getCurrentDonationPercentage()
 // Get current donation address
 static std::string getCurrentDonationAddress()
 {
-    // JunoCash: No default donation address - user must provide explicit Orchard address
-    return GetArg("-donationaddress", "");
+    std::string donationAddr = GetArg("-donationaddress", "");
+
+    // Use default address from chain params if not specified
+    if (donationAddr.empty()) {
+        donationAddr = Params().GetDefaultDonationAddress();
+    }
+
+    return donationAddr;
 }
 
 // Update donation percentage
@@ -885,10 +891,11 @@ static void toggleDonation()
         // Turn off
         updateDonationPercentage(0);
     } else {
-        // Check if donation address is configured
+        // Check if donation address is available (will use defaults on mainnet/testnet)
         std::string donationAddr = getCurrentDonationAddress();
         if (donationAddr.empty()) {
-            LogPrintf("Cannot enable donations: no -donationaddress configured\n");
+            // This can only happen on regtest without explicit address
+            LogPrintf("Cannot enable donations: no -donationaddress configured (regtest requires explicit address)\n");
             return;
         }
         // Turn on with default 5%

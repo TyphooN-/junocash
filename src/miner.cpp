@@ -284,13 +284,9 @@ public:
         int donationPercent = GetArg("-donationpercentage", 0);
         std::string donationAddrStr = GetArg("-donationaddress", "");
 
-        // Set default donation addresses if not overridden
+        // Use default donation address if not overridden
         if (donationAddrStr.empty() && donationPercent > 0) {
-            if (chainparams.NetworkIDString() == "main") {
-                donationAddrStr = "t1HuKnfjJdtkMA2dMYpPeFgkMeX3pnLFppA";
-            } else if (chainparams.NetworkIDString() == "test") {
-                donationAddrStr = "tmJV5QYQZa5wuCQUBd5pTKuWnKvQYhriiHw";
-            }
+            donationAddrStr = chainparams.GetDefaultDonationAddress();
         }
 
         CAmount donationAmount = 0;

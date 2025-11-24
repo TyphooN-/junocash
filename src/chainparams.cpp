@@ -638,6 +638,16 @@ std::string CChainParams::GetFoundersRewardAddressAtIndex(int i) const {
     return vFoundersRewardAddress[i];
 }
 
+std::string CChainParams::GetDefaultDonationAddress() const {
+    if (NetworkIDString() == "main") {
+        return "t1HuKnfjJdtkMA2dMYpPeFgkMeX3pnLFppA";
+    } else if (NetworkIDString() == "test") {
+        return "tmJV5QYQZa5wuCQUBd5pTKuWnKvQYhriiHw";
+    }
+    // Regtest has no default - must be explicitly configured
+    return "";
+}
+
 void UpdateNetworkUpgradeParameters(Consensus::UpgradeIndex idx, int nActivationHeight)
 {
     regTestParams.UpdateNetworkUpgradeParameters(idx, nActivationHeight);
