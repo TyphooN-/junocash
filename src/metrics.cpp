@@ -910,8 +910,8 @@ static void promptForPercentage()
     enableCanonicalMode();
 #endif
 
-    // Clear the input area and show prompt
-    std::cout << "\n\e[K";  // Clear line
+    // Move to bottom of screen for input prompt (avoid corrupting display)
+    std::cout << "\e[999;1H\e[K";  // Move far down and clear line
     std::cout << "Enter donation percentage (0-100): " << std::flush;
 
     std::string input;
@@ -921,19 +921,25 @@ static void promptForPercentage()
         int percentage = std::stoi(input);
         if (percentage >= 0 && percentage <= 100) {
             updateDonationPercentage(percentage);
+            std::cout << "\e[K";  // Clear current line
             if (percentage == 0) {
-                std::cout << "Donations disabled." << std::endl;
+                std::cout << "Donations disabled. Press any key..." << std::flush;
             } else {
-                std::cout << "Donation set to " << percentage << "%" << std::endl;
+                std::cout << "Donation set to " << percentage << "%. Press any key..." << std::flush;
             }
         } else {
-            std::cout << "Invalid percentage. Must be between 0 and 100." << std::endl;
+            std::cout << "\e[K";  // Clear current line
+            std::cout << "Invalid percentage. Press any key..." << std::flush;
         }
     } catch (...) {
-        std::cout << "Invalid input. Please enter a number." << std::endl;
+        std::cout << "\e[K";  // Clear current line
+        std::cout << "Invalid input. Press any key..." << std::flush;
     }
 
-    MilliSleep(1500);  // Give user time to see the message
+    // Wait for any keypress
+    char c;
+    ssize_t result = read(STDIN_FILENO, &c, 1);
+    (void)result;  // Ignore return value
 
 #ifndef WIN32
     enableRawMode();
@@ -963,8 +969,8 @@ static void promptForThreads()
     enableCanonicalMode();
 #endif
 
-    // Clear the input area and show prompt
-    std::cout << "\n\e[K";  // Clear line
+    // Move to bottom of screen for input prompt (avoid corrupting display)
+    std::cout << "\e[999;1H\e[K";  // Move far down and clear line
     std::cout << "Enter number of mining threads (1-" << boost::thread::hardware_concurrency() << ", or -1 for all cores): " << std::flush;
 
     std::string input;
@@ -989,15 +995,21 @@ static void promptForThreads()
             } else {
                 LogPrintf("User set mining threads to %d (will apply when mining starts)\n", threads);
             }
-            std::cout << "Mining threads set to " << threads << std::endl;
+            std::cout << "\e[K";  // Clear current line
+            std::cout << "Mining threads set to " << threads << ". Press any key..." << std::flush;
         } else {
-            std::cout << "Invalid thread count. Must be between 1 and " << maxThreads << " (or -1 for all cores)." << std::endl;
+            std::cout << "\e[K";  // Clear current line
+            std::cout << "Invalid thread count. Press any key..." << std::flush;
         }
     } catch (...) {
-        std::cout << "Invalid input. Please enter a number." << std::endl;
+        std::cout << "\e[K";  // Clear current line
+        std::cout << "Invalid input. Press any key..." << std::flush;
     }
 
-    MilliSleep(1500);  // Give user time to see the message
+    // Wait for any keypress
+    char c;
+    ssize_t result = read(STDIN_FILENO, &c, 1);
+    (void)result;  // Ignore return value
 
 #ifndef WIN32
     enableRawMode();
