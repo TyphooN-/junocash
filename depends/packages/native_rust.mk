@@ -19,6 +19,8 @@ $(package)_sha256_hash_aarch64_linux=ef4da9c1ecd56bbbb36f42793524cce3062e6a823ae
 # Mapping from GCC canonical hosts to Rust targets
 $(package)_rust_target_x86_64-pc-linux-gnu=x86_64-unknown-linux-gnu
 $(package)_rust_target_x86_64-w64-mingw32=x86_64-pc-windows-gnu
+$(package)_rust_target_x86_64-apple-darwin18=x86_64-apple-darwin
+$(package)_rust_target_aarch64-apple-darwin=aarch64-apple-darwin
 
 # Mapping from Rust targets to SHA-256 hashes
 $(package)_rust_std_sha256_hash_aarch64-unknown-linux-gnu=234673e33b7a523818a81dc233ba636ffc5e4c94b9766f12e19a63c985ed7d21
