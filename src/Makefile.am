@@ -112,6 +112,10 @@ RUST_ENV_VARS = \
   CFLAGS="$(CFLAGS)" \
   CXX="$(CXX)" \
   CXXFLAGS="$(CXXFLAGS)" \
+  CC_x86_64_apple_darwin="$(abs_top_srcdir)/depends/x86_64-apple-darwin18/native/bin/x86_64-apple-darwin18-cc" \
+  CC_aarch64_apple_darwin="$(abs_top_srcdir)/depends/aarch64-apple-darwin/native/bin/aarch64-apple-darwin-cc" \
+  CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER="$(abs_top_srcdir)/depends/x86_64-apple-darwin18/native/bin/x86_64-apple-darwin18-cc" \
+  CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER="$(abs_top_srcdir)/depends/aarch64-apple-darwin/native/bin/aarch64-apple-darwin-cc" \
   TERM=dumb
 RUST_BUILD_OPTS = --release --target $(RUST_TARGET) --manifest-path $(top_srcdir)/Cargo.toml
 
