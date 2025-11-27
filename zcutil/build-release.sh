@@ -24,6 +24,7 @@ BUILD_MACOS_INTEL=false
 BUILD_MACOS_ARM=false
 BUILD_ALL=false
 CLEAN_BUILD=false
+CREATE_DMG=true
 JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 RELEASE_DIR="${REPO_ROOT}/release"
 SDK_PATH="${REPO_ROOT}/depends/SDKs"
@@ -78,6 +79,7 @@ OPTIONS:
     -j, --jobs N            Number of parallel jobs (default: $JOBS)
     -o, --output DIR        Output directory for releases (default: ./release)
     -s, --sdk-path PATH     Path to macOS SDK directory (default: ./depends/SDKs)
+    --no-dmg                Skip DMG creation for macOS builds
     -h, --help              Show this help message
 
 EXAMPLES:
@@ -139,6 +141,9 @@ parse_args() {
             -s|--sdk-path)
                 SDK_PATH="$2"
                 shift
+                ;;
+            --no-dmg)
+                CREATE_DMG=false
                 ;;
             -h|--help)
                 usage
@@ -379,11 +384,88 @@ CONFEOF
         shasum -a 256 "$ARCHIVE_NAME" >> "SHA256SUMS.txt"
     fi
 
+    # Create DMG for macOS platforms
+    if [[ "$PLATFORM_NAME" == macos* ]] && [ "$CREATE_DMG" = true ]; then
+        create_dmg "$PLATFORM_NAME"
+    fi
+
     # Clean up temp directory
     rm -rf "$PKG_DIR"
 
     cd "$REPO_ROOT"
     print_success "Package created: $ARCHIVE_NAME"
+}
+
+# Create DMG for macOS
+create_dmg() {
+    local PLATFORM_NAME="$1"
+    local DMG_NAME="junocash-${FULL_VERSION}-${PLATFORM_NAME}.dmg"
+
+    print_info "Creating DMG: $DMG_NAME..."
+
+    # Recreate the package directory for DMG (was just deleted for tar)
+    local PKG_DIR="$RELEASE_DIR/junocash-${FULL_VERSION}-${PLATFORM_NAME}"
+    mkdir -p "$PKG_DIR/bin"
+
+    # Copy binaries
+    cp "$REPO_ROOT/src/junocashd" "$PKG_DIR/bin/" 2>/dev/null || true
+    cp "$REPO_ROOT/src/junocash-cli" "$PKG_DIR/bin/" 2>/dev/null || true
+    cp "$REPO_ROOT/src/junocash-tx" "$PKG_DIR/bin/" 2>/dev/null || true
+    cp "$REPO_ROOT/target/release/junocashd-wallet-tool" "$PKG_DIR/bin/" 2>/dev/null || true
+
+    # Copy documentation
+    cp "$REPO_ROOT/README.md" "$PKG_DIR/" 2>/dev/null || true
+    cp "$REPO_ROOT/COPYING" "$PKG_DIR/" 2>/dev/null || true
+
+    # Create install instructions
+    cat > "$PKG_DIR/INSTALL.txt" <<'INSTALLEOF'
+Juno Cash Installation
+======================
+
+1. Copy the 'bin' folder to a location of your choice
+   (e.g., /Applications/JunoCash or ~/Applications/JunoCash)
+
+2. Add the bin folder to your PATH, or run binaries directly:
+
+   ./bin/junocashd --help
+   ./bin/junocash-cli --help
+
+3. Create a configuration file at ~/.junocash/junocashd.conf
+
+For more information, visit: https://github.com/user/juno
+INSTALLEOF
+
+    # Call create-dmg.sh script
+    if [ -x "$REPO_ROOT/zcutil/create-dmg.sh" ]; then
+        "$REPO_ROOT/zcutil/create-dmg.sh" \
+            --source "$PKG_DIR" \
+            --output "$RELEASE_DIR" \
+            --version "$FULL_VERSION" \
+            --name "junocash-${FULL_VERSION}-${PLATFORM_NAME}"
+    else
+        print_warn "create-dmg.sh not found, skipping DMG creation"
+    fi
+
+    # Add DMG checksum if it was created
+    if [ -f "$RELEASE_DIR/$DMG_NAME" ]; then
+        cd "$RELEASE_DIR"
+        # Remove old checksum for this DMG if it exists
+        if [ -f "SHA256SUMS.txt" ]; then
+            grep -v "$DMG_NAME" "SHA256SUMS.txt" > "SHA256SUMS.txt.tmp" 2>/dev/null || true
+            mv "SHA256SUMS.txt.tmp" "SHA256SUMS.txt"
+        fi
+        # Add new checksum
+        if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$DMG_NAME" >> "SHA256SUMS.txt"
+        elif command -v shasum >/dev/null 2>&1; then
+            shasum -a 256 "$DMG_NAME" >> "SHA256SUMS.txt"
+        fi
+        cd "$REPO_ROOT"
+        print_success "DMG created: $DMG_NAME"
+    fi
+
+    # Clean up temp directory
+    rm -rf "$PKG_DIR"
 }
 
 # Main execution

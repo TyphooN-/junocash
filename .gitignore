@@ -134,3 +134,4 @@ src/fuzz.cpp
 .env
 poetry.lock
 release/
+build-tools/
