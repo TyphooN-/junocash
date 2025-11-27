@@ -6,6 +6,7 @@
 #include "metrics.h"
 
 #include "chainparams.h"
+#include "init.h"
 #include "checkpoints.h"
 #include "main.h"
 #include "miner.h"
@@ -681,9 +682,10 @@ int printMiningStatus(bool mining)
             // Donations are OFF, show current state
             controls += "  \e[1;37m[D]\e[0m Donations: \e[1;31mOFF\e[0m";
         }
+        controls += "  \e[1;37m[Q]\e[0m Quit";
         drawCentered(controls);
     } else {
-        drawCentered("\e[1;37m[M]\e[0m Mining: \e[1;31mOFF\e[0m");
+        drawCentered("\e[1;37m[M]\e[0m Mining: \e[1;31mOFF\e[0m  \e[1;37m[Q]\e[0m Quit");
     }
     lines++;
 
@@ -1124,7 +1126,12 @@ void ThreadShowMetricsScreen()
             // Check for keyboard input
             if (isScreen && isTTY) {
                 int key = checkKeyPress();
-                if (key == 'M' || key == 'm') {
+                if (key == 'Q' || key == 'q') {
+                    // Quit the daemon gracefully
+                    std::cout << std::endl << "Shutting down, please wait..." << std::endl << std::endl;
+                    StartShutdown();
+                    return;
+                } else if (key == 'M' || key == 'm') {
                     toggleMining();
                     break;  // Force screen refresh
                 } else if (key == 'T' || key == 't') {
