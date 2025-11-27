@@ -16,7 +16,10 @@ $(package)_config_opts_mingw32=--enable-mingw
 $(package)_config_opts_linux=--with-pic
 $(package)_config_opts_freebsd=--with-pic
 $(package)_config_opts_darwin=--with-mutex=Darwin/_spin_lock_try
-$(package)_config_opts_aarch64_darwin=--disable-atomicsupport
+# Disable atomic support when cross-compiling for Darwin (test program can't run)
+ifneq ($(build_os),darwin)
+$(package)_config_opts_darwin+=--disable-atomicsupport
+endif
 ifneq ($(host_os),darwin)
 $(package)_config_opts_aarch64=--disable-atomicsupport
 endif
