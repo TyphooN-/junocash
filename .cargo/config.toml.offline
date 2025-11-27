@@ -4,6 +4,9 @@ linker = "aarch64-linux-gnu-gcc"
 [target.aarch64-apple-darwin]
 linker = "depends/aarch64-apple-darwin/native/bin/aarch64-apple-darwin-cc"
 
+[target.x86_64-apple-darwin]
+linker = "depends/x86_64-apple-darwin18/native/bin/x86_64-apple-darwin18-cc"
+
 [source.crates-io]
 replace-with = "vendored-sources"
 
