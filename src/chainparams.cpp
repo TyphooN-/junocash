@@ -176,7 +176,7 @@ public:
         // Juno Cash: No funding streams (0% dev tax)
 
         // The best chain should have at least this much work.
-        consensus.nMinimumChainWork = uint256S("0x1f4e3583");
+        consensus.nMinimumChainWork = uint256S("0x7df86fea");
 
         /**
          * Network magic bytes for Juno Cash - derived from Bitcoin block 919123 hash
