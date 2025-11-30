@@ -277,17 +277,21 @@ build_gitian_linux() {
 
     # Create base VM if needed
     cd "$GITIAN_BUILDER"
+
+    # Use direct Debian mirror (bypass apt-cacher-ng proxy)
+    export DIRECT_MIRROR=1
+
     if [ "$USE_LXC" = 1 ]; then
         if [ ! -e "base-bullseye-amd64" ]; then
             print_info "Creating Gitian base VM (this may take a while)..."
             export USE_LXC=1
-            bin/make-base-vm --suite bullseye --arch amd64 --lxc
+            bin/make-base-vm --distro debian --suite bullseye --arch amd64 --lxc
         fi
     elif [ "$USE_DOCKER" = 1 ]; then
         if ! docker images | grep -q "gitian-bullseye"; then
             print_info "Creating Gitian Docker image (this may take a while)..."
             export USE_DOCKER=1
-            bin/make-base-vm --suite bullseye --arch amd64 --docker
+            bin/make-base-vm --distro debian --suite bullseye --arch amd64 --docker
         fi
     fi
 
