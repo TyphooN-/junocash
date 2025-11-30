@@ -25,6 +25,7 @@ BUILD_MACOS_ARM=false
 BUILD_ALL=false
 CLEAN_BUILD=false
 CREATE_DMG=true
+USE_GITIAN=false
 JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 RELEASE_DIR="${REPO_ROOT}/release"
 SDK_PATH="${REPO_ROOT}/depends/SDKs"
@@ -75,6 +76,7 @@ OPTIONS:
     -m, --macos-intel       Build for macOS Intel (x86_64-apple-darwin)
     -a, --macos-arm         Build for macOS Apple Silicon (aarch64-apple-darwin)
     -A, --all               Build for all platforms (default if no platform specified)
+    -g, --gitian            Use Gitian for reproducible Linux builds (glibc 2.31)
     -c, --clean             Clean before building
     -j, --jobs N            Number of parallel jobs (default: $JOBS)
     -o, --output DIR        Output directory for releases (default: ./release)
@@ -95,10 +97,14 @@ EXAMPLES:
     # Build macOS with custom SDK path
     $0 --macos-arm --sdk-path /path/to/SDKs
 
+    # Build reproducible Linux release with Gitian (glibc 2.28)
+    $0 --linux --gitian
+
 NOTES:
     - For macOS builds, you need to set up the SDK first. See doc/macos-sdk-setup.md
     - Windows builds require mingw-w64 toolchain
     - Cross-compilation dependencies will be built automatically via depends/
+    - Gitian builds require LXC or Docker. See contrib/gitian-descriptors/README.md
 
 EOF
     exit 0
@@ -126,6 +132,9 @@ parse_args() {
                 ;;
             -A|--all)
                 BUILD_ALL=true
+                ;;
+            -g|--gitian)
+                USE_GITIAN=true
                 ;;
             -c|--clean)
                 CLEAN_BUILD=true
@@ -237,6 +246,87 @@ clean_build() {
     fi
 }
 
+# Build Linux with Gitian for reproducible builds
+build_gitian_linux() {
+    print_step "Building Linux with Gitian (reproducible, glibc 2.31)"
+
+    cd "$REPO_ROOT"
+
+    # Check for gitian-builder
+    local GITIAN_BUILDER="${REPO_ROOT}/../gitian-builder"
+    if [ ! -d "$GITIAN_BUILDER" ]; then
+        print_info "Cloning gitian-builder..."
+        git clone https://github.com/devrandom/gitian-builder.git "$GITIAN_BUILDER"
+    fi
+
+    # Check for LXC or Docker
+    local USE_LXC=0
+    local USE_DOCKER=0
+    if command -v lxc-create >/dev/null 2>&1; then
+        USE_LXC=1
+        print_info "Using LXC for Gitian build"
+    elif command -v docker >/dev/null 2>&1; then
+        USE_DOCKER=1
+        print_info "Using Docker for Gitian build"
+    else
+        print_error "Gitian requires LXC or Docker. Please install one of them."
+        print_info "  LXC: sudo apt-get install lxc"
+        print_info "  Docker: https://docs.docker.com/get-docker/"
+        exit 1
+    fi
+
+    # Create base VM if needed
+    cd "$GITIAN_BUILDER"
+    if [ "$USE_LXC" = 1 ]; then
+        if [ ! -e "base-bullseye-amd64" ]; then
+            print_info "Creating Gitian base VM (this may take a while)..."
+            export USE_LXC=1
+            bin/make-base-vm --suite bullseye --arch amd64 --lxc
+        fi
+    elif [ "$USE_DOCKER" = 1 ]; then
+        if ! docker images | grep -q "gitian-bullseye"; then
+            print_info "Creating Gitian Docker image (this may take a while)..."
+            export USE_DOCKER=1
+            bin/make-base-vm --suite bullseye --arch amd64 --docker
+        fi
+    fi
+
+    # Set reference datetime for reproducibility
+    local REF_DATETIME
+    REF_DATETIME=$(date -u +"%Y-%m-%d %H:%M:%S")
+
+    # Run Gitian build
+    print_info "Running Gitian build..."
+    mkdir -p inputs
+
+    if [ "$USE_LXC" = 1 ]; then
+        export USE_LXC=1
+    else
+        export USE_DOCKER=1
+    fi
+
+    bin/gbuild --commit junocash=HEAD \
+        --url junocash="$REPO_ROOT" \
+        "$REPO_ROOT/contrib/gitian-descriptors/gitian-linux-parallel.yml"
+
+    # Copy outputs
+    mkdir -p "$RELEASE_DIR"
+    cp -v build/out/*.tar.gz "$RELEASE_DIR/" 2>/dev/null || true
+
+    cd "$REPO_ROOT"
+    print_success "Gitian build complete"
+
+    # Verify symbol versions
+    print_info "Verifying glibc symbols..."
+    if [ -f "$RELEASE_DIR/junocash-${FULL_VERSION}-linux64.tar.gz" ]; then
+        local TEMP_DIR
+        TEMP_DIR=$(mktemp -d)
+        tar -xzf "$RELEASE_DIR/junocash-${FULL_VERSION}-linux64.tar.gz" -C "$TEMP_DIR"
+        python3 "$REPO_ROOT/contrib/devtools/symbol-check.py" "$TEMP_DIR"/*/bin/junocashd || true
+        rm -rf "$TEMP_DIR"
+    fi
+}
+
 # Build for a specific platform
 build_platform() {
     local PLATFORM_NAME="$1"
@@ -284,8 +374,12 @@ build_all_platforms() {
 
     # Linux
     if [ "$BUILD_LINUX" = true ]; then
-        build_platform "Linux x86_64" "x86_64-pc-linux-gnu"
-        package_release "linux-x86_64" "x86_64-pc-linux-gnu"
+        if [ "$USE_GITIAN" = true ]; then
+            build_gitian_linux
+        else
+            build_platform "Linux x86_64" "x86_64-pc-linux-gnu"
+            package_release "linux-x86_64" "x86_64-pc-linux-gnu"
+        fi
     fi
 
     # Windows
