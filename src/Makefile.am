@@ -851,7 +851,27 @@ CLEANFILES = *.gcda *.gcno */*.gcno wallet/*/*.gcno $(bin_SCRIPTS) crypto/random
 
 DISTCLEANFILES = obj/build.h
 
-EXTRA_DIST = $(CTAES_DIST) rust
+EXTRA_DIST = $(CTAES_DIST) rust \
+  crypto/randomx/jit_compiler_x86_static.S \
+  crypto/randomx/jit_compiler_a64_static.S \
+  crypto/randomx/jit_compiler_rv64_static.S \
+  crypto/randomx/jit_compiler_x86_static.asm \
+  crypto/randomx/asm/configuration.asm \
+  crypto/randomx/asm/program_epilogue_linux.inc \
+  crypto/randomx/asm/program_epilogue_store.inc \
+  crypto/randomx/asm/program_epilogue_win64.inc \
+  crypto/randomx/asm/program_loop_load.inc \
+  crypto/randomx/asm/program_loop_store.inc \
+  crypto/randomx/asm/program_prologue_linux.inc \
+  crypto/randomx/asm/program_prologue_win64.inc \
+  crypto/randomx/asm/program_read_dataset.inc \
+  crypto/randomx/asm/program_read_dataset_sshash_fin.inc \
+  crypto/randomx/asm/program_read_dataset_sshash_init.inc \
+  crypto/randomx/asm/program_sshash_constants.inc \
+  crypto/randomx/asm/program_sshash_load.inc \
+  crypto/randomx/asm/program_sshash_prefetch.inc \
+  crypto/randomx/asm/program_xmm_constants.inc \
+  crypto/randomx/asm/randomx_reciprocal.inc
 
 clean-local:
 	rm -f $(top_srcdir)/.cargo/config.toml $(top_srcdir)/.cargo/config $(top_srcdir)/.cargo/.configured-for-*
