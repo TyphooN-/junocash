@@ -3,7 +3,6 @@ name: "junocash"
 enable_cache: true
 distro: "debian"
 suites:
-- "bookworm"
 - "bullseye"
 architectures:
 - "amd64"
