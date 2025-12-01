@@ -26,6 +26,7 @@ BUILD_ALL=false
 CLEAN_BUILD=false
 CREATE_DMG=true
 USE_GITIAN=false
+FORCE_DOCKER=false
 JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 RELEASE_DIR="${REPO_ROOT}/release"
 SDK_PATH="${REPO_ROOT}/depends/SDKs"
@@ -77,6 +78,7 @@ OPTIONS:
     -a, --macos-arm         Build for macOS Apple Silicon (aarch64-apple-darwin)
     -A, --all               Build for all platforms (default if no platform specified)
     -g, --gitian            Use Gitian for reproducible Linux builds (glibc 2.31)
+    -d, --docker            Force Docker for Gitian (default: LXC if available)
     -c, --clean             Clean before building
     -j, --jobs N            Number of parallel jobs (default: $JOBS)
     -o, --output DIR        Output directory for releases (default: ./release)
@@ -135,6 +137,9 @@ parse_args() {
                 ;;
             -g|--gitian)
                 USE_GITIAN=true
+                ;;
+            -d|--docker)
+                FORCE_DOCKER=true
                 ;;
             -c|--clean)
                 CLEAN_BUILD=true
@@ -262,7 +267,17 @@ build_gitian_linux() {
     # Check for LXC or Docker
     local USE_LXC=0
     local USE_DOCKER=0
-    if command -v lxc-create >/dev/null 2>&1; then
+
+    if [ "$FORCE_DOCKER" = true ]; then
+        if command -v docker >/dev/null 2>&1; then
+            USE_DOCKER=1
+            print_info "Using Docker for Gitian build (forced)"
+        else
+            print_error "Docker requested but not found. Please install Docker."
+            print_info "  Docker: https://docs.docker.com/get-docker/"
+            exit 1
+        fi
+    elif command -v lxc-create >/dev/null 2>&1; then
         USE_LXC=1
         print_info "Using LXC for Gitian build"
     elif command -v docker >/dev/null 2>&1; then
