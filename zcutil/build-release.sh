@@ -26,7 +26,9 @@ BUILD_ALL=false
 CLEAN_BUILD=false
 CREATE_DMG=true
 USE_GITIAN=false
-FORCE_DOCKER=false
+FORCE_LXC=false
+# Pinned Debian Bullseye image for reproducible builds (glibc 2.31)
+DEBIAN_BULLSEYE_DIGEST="ee239c601913c0d3962208299eef70dcffcb7aac1787f7a02f6d3e2b518755e6"
 JOBS=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 RELEASE_DIR="${REPO_ROOT}/release"
 SDK_PATH="${REPO_ROOT}/depends/SDKs"
@@ -78,7 +80,7 @@ OPTIONS:
     -a, --macos-arm         Build for macOS Apple Silicon (aarch64-apple-darwin)
     -A, --all               Build for all platforms (default if no platform specified)
     -g, --gitian            Use Gitian for reproducible Linux builds (glibc 2.31)
-    -d, --docker            Force Docker for Gitian (default: LXC if available)
+    --lxc                   Force LXC for Gitian (default: Docker)
     -c, --clean             Clean before building
     -j, --jobs N            Number of parallel jobs (default: $JOBS)
     -o, --output DIR        Output directory for releases (default: ./release)
@@ -138,8 +140,8 @@ parse_args() {
             -g|--gitian)
                 USE_GITIAN=true
                 ;;
-            -d|--docker)
-                FORCE_DOCKER=true
+            --lxc)
+                FORCE_LXC=true
                 ;;
             -c|--clean)
                 CLEAN_BUILD=true
@@ -264,29 +266,29 @@ build_gitian_linux() {
         git clone https://github.com/devrandom/gitian-builder.git "$GITIAN_BUILDER"
     fi
 
-    # Check for LXC or Docker
+    # Check for Docker or LXC (Docker is preferred for reproducibility)
     local USE_LXC=0
     local USE_DOCKER=0
 
-    if [ "$FORCE_DOCKER" = true ]; then
-        if command -v docker >/dev/null 2>&1; then
-            USE_DOCKER=1
-            print_info "Using Docker for Gitian build (forced)"
+    if [ "$FORCE_LXC" = true ]; then
+        if command -v lxc-create >/dev/null 2>&1; then
+            USE_LXC=1
+            print_info "Using LXC for Gitian build (forced)"
         else
-            print_error "Docker requested but not found. Please install Docker."
-            print_info "  Docker: https://docs.docker.com/get-docker/"
+            print_error "LXC requested but not found. Please install LXC."
+            print_info "  LXC: sudo apt-get install lxc"
             exit 1
         fi
-    elif command -v lxc-create >/dev/null 2>&1; then
-        USE_LXC=1
-        print_info "Using LXC for Gitian build"
     elif command -v docker >/dev/null 2>&1; then
         USE_DOCKER=1
-        print_info "Using Docker for Gitian build"
+        print_info "Using Docker for Gitian build (pinned image: debian@sha256:${DEBIAN_BULLSEYE_DIGEST:0:12}...)"
+    elif command -v lxc-create >/dev/null 2>&1; then
+        USE_LXC=1
+        print_info "Using LXC for Gitian build (Docker not available)"
     else
-        print_error "Gitian requires LXC or Docker. Please install one of them."
-        print_info "  LXC: sudo apt-get install lxc"
+        print_error "Gitian requires Docker (preferred) or LXC. Please install one of them."
         print_info "  Docker: https://docs.docker.com/get-docker/"
+        print_info "  LXC: sudo apt-get install lxc"
         exit 1
     fi
 
@@ -296,6 +298,9 @@ build_gitian_linux() {
     # Use direct Debian mirror (bypass apt-cacher-ng proxy)
     export DIRECT_MIRROR=1
 
+    # Expected image name based on pinned hash
+    local PINNED_IMAGE_NAME="base-${DEBIAN_BULLSEYE_DIGEST}-amd64"
+
     if [ "$USE_LXC" = 1 ]; then
         if [ ! -e "base-bullseye-amd64" ]; then
             print_info "Creating Gitian base VM (this may take a while)..."
@@ -303,9 +308,10 @@ build_gitian_linux() {
             bin/make-base-vm --distro debian --suite bullseye --arch amd64 --lxc
         fi
     elif [ "$USE_DOCKER" = 1 ]; then
-        if ! docker images | grep -q "gitian-bullseye"; then
-            print_info "Creating Gitian Docker image (this may take a while)..."
+        if ! docker images | grep -q "$PINNED_IMAGE_NAME"; then
+            print_info "Creating Gitian Docker image with pinned base..."
             export USE_DOCKER=1
+            export DOCKER_IMAGE_HASH="$DEBIAN_BULLSEYE_DIGEST"
             bin/make-base-vm --distro debian --suite bullseye --arch amd64 --docker
         fi
     fi
@@ -322,6 +328,7 @@ build_gitian_linux() {
         export USE_LXC=1
     else
         export USE_DOCKER=1
+        export DOCKER_IMAGE_HASH="$DEBIAN_BULLSEYE_DIGEST"
     fi
 
     bin/gbuild --commit junocash=HEAD \
