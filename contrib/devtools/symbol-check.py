@@ -101,8 +101,9 @@ class CPPFilt(object):
         self.proc = subprocess.Popen(CPPFILT_CMD, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
     def __call__(self, mangled):
-        self.proc.stdin.write(mangled + '\n')
-        return self.proc.stdout.readline().rstrip()
+        self.proc.stdin.write((mangled + '\n').encode('utf-8'))
+        self.proc.stdin.flush()
+        return self.proc.stdout.readline().decode('utf-8').rstrip()
 
     def close(self):
         self.proc.stdin.close()
@@ -117,9 +118,9 @@ def read_symbols(executable, imports=True):
     p = subprocess.Popen([READELF_CMD, '--dyn-syms', '-W', executable], stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
     (stdout, stderr) = p.communicate()
     if p.returncode:
-        raise IOError('Could not read symbols for %s: %s' % (executable, stderr.strip()))
+        raise IOError('Could not read symbols for %s: %s' % (executable, stderr.decode('utf-8').strip()))
     syms = []
-    for line in stdout.split('\n'):
+    for line in stdout.decode('utf-8').split('\n'):
         line = line.split()
         if len(line)>7 and re.match('[0-9]+:$', line[0]):
             (sym, _, version) = line[7].partition('@')
@@ -147,7 +148,7 @@ def read_libraries(filename):
     if p.returncode:
         raise IOError('Error opening file')
     libraries = []
-    for line in stdout.split('\n'):
+    for line in stdout.decode('utf-8').split('\n'):
         tokens = line.split()
         if len(tokens)>2 and tokens[1] == '(NEEDED)':
             match = re.match('^Shared library: \[(.*)\]$', ' '.join(tokens[2:]))
