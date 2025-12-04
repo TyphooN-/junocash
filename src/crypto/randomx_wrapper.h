@@ -99,8 +99,17 @@ bool RandomX_Verify(const void* input, size_t inputSize, const uint256& expected
 /**
  * Initialize RandomX (call once at startup).
  * This prepares the RandomX cache and VM.
+ *
+ * @param fastMode If true, use full 2GB dataset for ~2x faster mining.
+ *                 If false (default), use 256MB cache (light mode).
  */
-void RandomX_Init();
+void RandomX_Init(bool fastMode = false);
+
+/**
+ * Check if RandomX is running in fast mode.
+ * @return true if using full dataset, false if using light mode.
+ */
+bool RandomX_IsFastMode();
 
 /**
  * Cleanup RandomX (call at shutdown).
