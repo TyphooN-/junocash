@@ -899,8 +899,9 @@ void static BitcoinMiner(const CChainParams& chainparams)
     SetThreadPriority(THREAD_PRIORITY_LOWEST);
     RenameThread("juno-miner");
 
-    // Initialize RandomX
-    RandomX_Init();
+    // Initialize RandomX (if not already done by init.cpp)
+    bool randomxFastMode = GetBoolArg("-randomxfastmode", false);
+    RandomX_Init(randomxFastMode);
 
     // Each thread has its own counter
     unsigned int nExtraNonce = 0;
