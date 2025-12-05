@@ -519,7 +519,7 @@ CONFEOF
 # Create DMG for macOS
 create_dmg() {
     local PLATFORM_NAME="$1"
-    local DMG_NAME="junocash-${FULL_VERSION}-${PLATFORM_NAME}.dmg"
+    local DMG_NAME="junocash-${FULL_VERSION}-${PLATFORM_NAME}-unsigned.dmg"
 
     print_info "Creating DMG: $DMG_NAME..."
 
