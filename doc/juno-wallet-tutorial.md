@@ -130,12 +130,22 @@ junocash-cli z_viewtransaction "txid..."
 junocash-cli listtransactions
 ```
 
+## 6. Backup Your Wallet
+
+View your 24-word recovery seed phrase:
+
+```bash
+junocash-cli z_getseedphrase
+```
+
+Write down these words and store them safely. Anyone with this phrase can access all your funds.
+
 ## Tips
 
 - **Coinbase Maturity**: Mining rewards need 100 confirmations before shielding
 - **Fees**: Calculated automatically using ZIP-317
 - **Privacy**: Shielded transactions hide amounts from everyone except sender and recipient
-- **Backups**: Always backup your wallet before sending large amounts
+- **Backups**: Write down your seed phrase with `z_getseedphrase` and store it safely
 
 ## Troubleshooting
 
