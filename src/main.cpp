@@ -349,6 +349,8 @@ struct CNodeState {
     CBlockIndex *pindexLastCommonBlock;
     //! Whether we've started headers synchronization with this peer.
     bool fSyncStarted;
+    //! When we started headers sync with this peer (microseconds), for stall detection.
+    int64_t nHeadersSyncStarted;
     //! Since when we're stalling block download progress (in microseconds), or 0.
     int64_t nStallingSince;
     list<QueuedBlock> vBlocksInFlight;
@@ -365,6 +367,7 @@ struct CNodeState {
         hashLastUnknownBlock.SetNull();
         pindexLastCommonBlock = NULL;
         fSyncStarted = false;
+        nHeadersSyncStarted = 0;
         nStallingSince = 0;
         nBlocksInFlight = 0;
         nBlocksInFlightValidHeaders = 0;
@@ -4081,6 +4084,14 @@ struct PoolMetrics {
 /** Update chainActive and related internal data structures. */
 void static UpdateTip(CBlockIndex *pindexNew, const CChainParams& chainParams) {
     chainActive.SetTip(pindexNew);
+
+    // Ensure pindexBestHeader is at least as good as the new tip.
+    // This fixes a desync issue where pindexBestHeader can become stale when
+    // blocks arrive after headers were already in mapBlockIndex, causing
+    // header sync to stall during IBD.
+    if (pindexBestHeader == NULL || pindexBestHeader->nChainWork < pindexNew->nChainWork) {
+        pindexBestHeader = pindexNew;
+    }
 
     // New best block
     nTimeBestReceived = GetTime();
@@ -7821,6 +7832,14 @@ bool static ProcessMessage(const CChainParams& chainparams, CNode* pfrom, string
         if (pindexLast)
             UpdateBlockAvailability(pfrom->GetId(), pindexLast->GetBlockHash());
 
+        // Reset header sync timer if we received new headers
+        if (hasNewHeaders && pindexLast) {
+            CNodeState *nodestate = State(pfrom->GetId());
+            if (nodestate && nodestate->fSyncStarted) {
+                nodestate->nHeadersSyncStarted = GetTimeMicros();
+            }
+        }
+
         // Temporary, until we're sure the optimization works
         if (nCount == MAX_HEADERS_RESULTS && pindexLast && !hasNewHeaders) {
             LogPrint("net", "NO more getheaders (%d) to send to peer=%d (startheight:%d)\n", pindexLast->nHeight, pfrom->id, pfrom->nStartingHeight);
@@ -8367,13 +8386,36 @@ bool SendMessages(const Consensus::Params& params, CNode* pto)
         state.rejects.clear();
 
         // Start block sync
-        if (pindexBestHeader == NULL)
+        // Ensure pindexBestHeader is at least chainActive.Tip() to prevent stalls
+        // during IBD when headers arrive out of order or via different code paths.
+        if (pindexBestHeader == NULL ||
+            (chainActive.Tip() != NULL && pindexBestHeader->nChainWork < chainActive.Tip()->nChainWork)) {
             pindexBestHeader = chainActive.Tip();
+        }
         bool fFetch = state.fPreferredDownload || (nPreferredDownload == 0 && !pto->fClient && !pto->fOneShot); // Download if this is a nice peer, or we have no nice peers and this one might do.
+
+        // Detect stalled header sync and allow other peers to try.
+        // If this peer has been syncing headers for too long without progress, reset their sync state.
+        if (state.fSyncStarted && state.nHeadersSyncStarted > 0) {
+            int64_t nHeadersSyncTimeout = 1000000 * HEADERS_SYNC_STALL_TIMEOUT;
+            // Check if this peer has been syncing for too long AND we're still behind
+            if (nNow - state.nHeadersSyncStarted > nHeadersSyncTimeout &&
+                pindexBestHeader != NULL &&
+                pto->nStartingHeight > pindexBestHeader->nHeight + 100) {
+                // This peer's header sync has stalled, let other peers try
+                LogPrintf("Header sync stalled with peer=%d at height %d (peer has %d), allowing other peers\n",
+                         pto->id, pindexBestHeader->nHeight, pto->nStartingHeight);
+                state.fSyncStarted = false;
+                state.nHeadersSyncStarted = 0;
+                nSyncStarted--;
+            }
+        }
+
         if (!state.fSyncStarted && !pto->fClient && !fImporting && !fReindex) {
             // Only actively request headers from a single peer, unless we're close to today.
             if ((nSyncStarted == 0 && fFetch) || pindexBestHeader->GetBlockTime() > GetTime() - 24 * 60 * 60) {
                 state.fSyncStarted = true;
+                state.nHeadersSyncStarted = nNow;
                 nSyncStarted++;
                 const CBlockIndex *pindexStart = pindexBestHeader;
                 /* If possible, start at the block preceding the currently
