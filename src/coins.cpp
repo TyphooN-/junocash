@@ -128,6 +128,16 @@ CCoinsMap::const_iterator CCoinsViewCache::FetchCoins(const uint256 &txid) const
 
 
 bool CCoinsViewCache::GetSproutAnchorAt(const uint256 &rt, SproutMerkleTree &tree) const {
+    // Juno Cash: Handle empty_root specially before checking cache.
+    // This prevents assertion failures when PopAnchor incorrectly marks
+    // empty_root as entered=false in the cache (which can happen if
+    // hashFinalSproutRoot is null instead of empty_root on a block index).
+    if (rt == SproutMerkleTree::empty_root()) {
+        SproutMerkleTree new_tree;
+        tree = new_tree;
+        return true;
+    }
+
     CAnchorsSproutMap::const_iterator it = cacheSproutAnchors.find(rt);
     if (it != cacheSproutAnchors.end()) {
         if (it->second.entered) {
@@ -151,6 +161,16 @@ bool CCoinsViewCache::GetSproutAnchorAt(const uint256 &rt, SproutMerkleTree &tre
 }
 
 bool CCoinsViewCache::GetSaplingAnchorAt(const uint256 &rt, SaplingMerkleTree &tree) const {
+    // Juno Cash: Handle empty_root specially before checking cache.
+    // This prevents assertion failures when PopAnchor incorrectly marks
+    // empty_root as entered=false in the cache (which can happen if
+    // hashFinalSaplingRoot is null instead of empty_root on a block index).
+    if (rt == SaplingMerkleTree::empty_root()) {
+        SaplingMerkleTree new_tree;
+        tree = new_tree;
+        return true;
+    }
+
     CAnchorsSaplingMap::const_iterator it = cacheSaplingAnchors.find(rt);
     if (it != cacheSaplingAnchors.end()) {
         if (it->second.entered) {
