@@ -15,6 +15,8 @@
 #include "util/strencodings.h"
 
 #include <stdio.h>
+#include <fstream>
+#include <cstdio>
 
 #include <event2/buffer.h>
 #include <event2/keyvalq_struct.h>
@@ -403,8 +405,32 @@ int CommandLineRPC(int argc, char *argv[])
                     // Result
                     if (result.isNull())
                         strPrint = "";
-                    else if (result.isStr())
-                        strPrint = result.get_str();
+                    else if (result.isStr()) {
+                        // Special handling for z_getseedphrase - read from temp file and delete
+                        if (strMethod == "z_getseedphrase") {
+                            std::string filePath = result.get_str();
+                            std::ifstream seedFile(filePath);
+                            if (seedFile.is_open()) {
+                                std::string seedPhrase;
+                                std::getline(seedFile, seedPhrase);
+                                seedFile.close();
+                                // Delete the temporary file
+                                std::remove(filePath.c_str());
+                                // Display with warning
+                                strPrint = "\n=== RECOVERY SEED PHRASE ===\n\n"
+                                           + seedPhrase + "\n\n"
+                                           "=== IMPORTANT ===\n"
+                                           "Write down these words and store them safely.\n"
+                                           "Anyone with this phrase can access all your funds.\n"
+                                           "Never share this phrase with anyone.\n";
+                            } else {
+                                strPrint = "error: Unable to read seed phrase file";
+                                nRet = EXIT_FAILURE;
+                            }
+                        } else {
+                            strPrint = result.get_str();
+                        }
+                    }
                     else
                         strPrint = result.write(2);
                 }

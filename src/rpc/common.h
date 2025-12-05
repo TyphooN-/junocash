@@ -125,6 +125,7 @@ static const CRPCConvertTable rpcCvtTable =
     { "importwallet",                {{s}, {}} },
     { "dumpprivkey",                 {{s}, {}} },
     { "z_exportwallet",              {{s}, {}} },
+    { "z_getseedphrase",             {{}, {}} },
     { "z_importkey",                 {{s}, {s, o}} },
     { "z_importviewingkey",          {{s}, {s, o}} },
     { "z_exportkey",                 {{s}, {}} },

@@ -24,6 +24,10 @@
 #include <stdint.h>
 #include <variant>
 
+#ifndef WIN32
+#include <sys/stat.h>
+#endif
+
 #include <boost/algorithm/string.hpp>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
@@ -683,6 +687,59 @@ UniValue z_exportwallet(const UniValue& params, bool fHelp)
     file.close();
 
     return exportfilepath.string();
+}
+
+UniValue z_getseedphrase(const UniValue& params, bool fHelp)
+{
+    if (!EnsureWalletIsAvailable(fHelp))
+        return NullUniValue;
+
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "z_getseedphrase\n"
+            "\nDisplays the wallet's 24-word recovery phrase.\n"
+            "\nThis command writes the seed phrase to a temporary file which is\n"
+            "read and displayed by junocash-cli, then immediately deleted.\n"
+            "The seed phrase is never transmitted over RPC for security.\n"
+            "\nIMPORTANT: Anyone with access to this phrase can steal all your funds.\n"
+            "Store it securely and never share it.\n"
+            "\nResult:\n"
+            "\"path\"           (string) Path to temporary file (for CLI to read)\n"
+            "\nExamples:\n"
+            + HelpExampleCli("z_getseedphrase", "")
+        );
+
+    LOCK2(cs_main, pwalletMain->cs_wallet);
+
+    EnsureWalletIsUnlocked();
+
+    std::optional<MnemonicSeed> hdSeed = pwalletMain->GetMnemonicSeed();
+    if (!hdSeed.has_value()) {
+        throw JSONRPCError(RPC_WALLET_ERROR, "Wallet does not have a mnemonic seed phrase");
+    }
+
+    // Generate a unique temporary filename
+    fs::path datadir = GetDataDir();
+    std::string tmpFilename = strprintf(".seedphrase_%d_%d", GetTime(), GetRand(1000000));
+    fs::path tmpPath = datadir / tmpFilename;
+
+    // Write seed phrase to temporary file
+    std::ofstream file;
+    file.open(tmpPath.string().c_str());
+    if (!file.is_open()) {
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Cannot create temporary file");
+    }
+
+    auto mSeed = hdSeed.value();
+    file << mSeed.GetMnemonic().c_str() << std::endl;
+    file.close();
+
+    // Set restrictive permissions (owner read only)
+#ifndef WIN32
+    chmod(tmpPath.string().c_str(), 0400);
+#endif
+
+    return tmpPath.string();
 }
 
 
