@@ -5104,24 +5104,92 @@ UniValue z_send(const UniValue& params, bool fHelp)
     if (fHelp || params.size() < 3 || params.size() > 6)
         throw runtime_error(
             "z_send \"fromaddress\" \"toaddress\" amount ( \"memo\" ) ( minconf ) ( fee )\n"
-            "\nSend funds to a single recipient. This is a simplified wrapper around z_sendmany for sending"
-            "\nto one address. Amounts are decimal numbers with at most 8 digits of precision."
+            "\nSend shielded funds to a single recipient. This is a simplified wrapper around z_sendmany"
+            "\nfor sending to one address. Amounts are decimal numbers with at most 8 digits of precision."
+            "\n\nNote: Transparent coinbases must first be shielded using z_shieldcoinbase before sending."
             + HelpRequiringPassphrase() + "\n"
             "\nArguments:\n"
-            "1. \"fromaddress\"         (string, required) The sending address. Can be a transparent or Unified Address,\n"
-            "                           or \"ANY_TADDR\" to select from any transparent address in the wallet.\n"
-            "2. \"toaddress\"           (string, required) The recipient address (transparent or Unified Address).\n"
+            "1. \"fromaddress\"         (string, required) A Unified Address with Orchard receiver to send from.\n"
+            "2. \"toaddress\"           (string, required) The recipient Unified Address with Orchard receiver.\n"
             "3. amount                (numeric, required) The amount to send in " + CURRENCY_UNIT + ".\n"
-            "4. \"memo\"                (string, optional) If sending to a shielded address, a hex-encoded memo field.\n"
+            "4. \"memo\"                (string, optional) Hex-encoded memo field for the recipient.\n"
             "5. minconf               (numeric, optional, default=" + strprintf("%u", DEFAULT_NOTE_CONFIRMATIONS) + ") Only use funds confirmed at least this many times.\n"
             "6. fee                   (numeric, optional, default=null) Fee calculated according to ZIP 317 if not specified.\n"
             "\nResult:\n"
             "\"operationid\"          (string) An operationid to pass to z_getoperationstatus to get the result.\n"
             "\nExamples:\n"
-            + HelpExampleCli("z_send", "\"ANY_TADDR\" \"<unified_address>\" 1.5")
-            + HelpExampleCli("z_send", "\"<unified_address>\" \"<unified_address>\" 2.0 \"\" 1 0.0001")
-            + HelpExampleRpc("z_send", "\"ANY_TADDR\", \"<unified_address>\", 1.5")
+            + HelpExampleCli("z_send", "\"<unified_address>\" \"<unified_address>\" 1.5")
+            + HelpExampleCli("z_send", "\"<unified_address>\" \"<unified_address>\" 2.0 \"48656c6c6f\" 1 0.0001")
+            + HelpExampleRpc("z_send", "\"<unified_address>\", \"<unified_address>\", 1.5")
         );
+
+    KeyIO keyIO(Params());
+
+    // Validate fromaddress is a Unified Address with Orchard receiver
+    auto fromStr = params[0].get_str();
+    auto fromAddr = keyIO.DecodePaymentAddress(fromStr);
+    if (!fromAddr.has_value()) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER,
+            std::string("Invalid fromaddress: ") + fromStr);
+    }
+    examine(fromAddr.value(), match {
+        [](const CKeyID&) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER,
+                "Cannot send from transparent address. Use z_shieldcoinbase first to shield funds.");
+        },
+        [](const CScriptID&) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER,
+                "Cannot send from transparent address. Use z_shieldcoinbase first to shield funds.");
+        },
+        [](const libzcash::SproutPaymentAddress&) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER,
+                "Sprout addresses are not supported.");
+        },
+        [](const libzcash::SaplingPaymentAddress&) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER,
+                "Sapling addresses are not supported. Use a Unified Address with Orchard receiver.");
+        },
+        [](const libzcash::UnifiedAddress& ua) {
+            if (!ua.GetOrchardReceiver().has_value()) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    "Unified Address must contain an Orchard receiver.");
+            }
+        },
+        [](const auto&) { }
+    });
+
+    // Validate toaddress is a Unified Address with Orchard receiver
+    auto toStr = params[1].get_str();
+    auto toAddr = keyIO.DecodePaymentAddress(toStr);
+    if (!toAddr.has_value()) {
+        throw JSONRPCError(RPC_INVALID_PARAMETER,
+            std::string("Invalid toaddress: ") + toStr);
+    }
+    examine(toAddr.value(), match {
+        [](const CKeyID&) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER,
+                "Cannot send to transparent address.");
+        },
+        [](const CScriptID&) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER,
+                "Cannot send to transparent address.");
+        },
+        [](const libzcash::SproutPaymentAddress&) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER,
+                "Sprout addresses are not supported.");
+        },
+        [](const libzcash::SaplingPaymentAddress&) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER,
+                "Sapling addresses are not supported. Use a Unified Address with Orchard receiver.");
+        },
+        [](const libzcash::UnifiedAddress& ua) {
+            if (!ua.GetOrchardReceiver().has_value()) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    "Unified Address must contain an Orchard receiver.");
+            }
+        },
+        [](const auto&) { }
+    });
 
     // Construct the amounts array for z_sendmany
     UniValue recipient(UniValue::VOBJ);
