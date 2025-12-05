@@ -135,7 +135,7 @@ protected:
     CAmount nSproutValuePoolCheckpointBalance = 0;
     uint256 hashSproutValuePoolCheckpointBlock;
     bool fZIP209Enabled = false;
-    bool fRequireWalletBackup = true;
+    bool fRequireWalletBackup = false;
 };
 
 /**

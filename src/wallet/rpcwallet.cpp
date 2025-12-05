@@ -239,7 +239,6 @@ UniValue t_getminingaddress(const UniValue& params, bool fHelp)
     LOCK2(cs_main, pwalletMain->cs_wallet);
 
     const CChainParams& chainparams = Params();
-    EnsureWalletIsBackedUp(chainparams);
     EnsureWalletIsUnlocked();
 
     // Generate a new key that is added to wallet

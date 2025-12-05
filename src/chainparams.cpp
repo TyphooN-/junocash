@@ -524,9 +524,6 @@ public:
 
         // Juno Cash: No founders reward (0% dev tax)
         vFoundersRewardAddress = {};
-
-        // do not require the wallet backup to be confirmed in regtest mode
-        fRequireWalletBackup = false;
     }
 
     void UpdateNetworkUpgradeParameters(Consensus::UpgradeIndex idx, int nActivationHeight)
