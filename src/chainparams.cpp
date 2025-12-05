@@ -201,6 +201,7 @@ public:
         vFixedSeeds.clear();
         vSeeds.clear();
         vSeeds.push_back(CDNSSeedData("junomoneta.io", "dnsseed.junomoneta.io"));
+	vSeeds.push_back(CDNSSeedData("juno.cash", "dnsseed.juno.cash"));
 
         vFixedSeeds = std::vector<SeedSpec6>(pnSeed6_main, pnSeed6_main + ARRAYLEN(pnSeed6_main));
 
@@ -365,6 +366,7 @@ public:
         vFixedSeeds.clear();
         vSeeds.clear();
         vSeeds.push_back(CDNSSeedData("junomoneta.io", "dnsseed.testnet.junomoneta.io"));
+	vSeeds.push_back(CDNSSeedData("juno.cash", "dnsseed.testnet.juno.cash"));
 
         vFixedSeeds = std::vector<SeedSpec6>(pnSeed6_test, pnSeed6_test + ARRAYLEN(pnSeed6_test));
 
