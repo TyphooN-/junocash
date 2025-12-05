@@ -589,22 +589,9 @@ UniValue listaddresses(const UniValue& params, bool fHelp)
             "  {\n"
             "    \"source\": \"imported|imported_watchonly|legacy_random|legacy_seed|mnemonic_seed\"\n"
             "    \"transparent\": {\n"
-            "      \"addresses\": [\"t14oHp2v54vfmdgQ3v3SNuQga8JKHTNi2a1\", ...],\n"
-            "      \"changeAddresses\": [\"t14oHp2v54vfmdgQ3v3SNuQga8JKHTNi2a1\", ...]\n"
+            "      \"addresses\": [\"<taddr>\", ...],\n"
+            "      \"changeAddresses\": [\"<taddr>\", ...]\n"
             "    },\n"
-            "    \"sprout\": {\n"
-            "      \"addresses\": [\"ztbx5DLDxa5ZLFTchHhoPNkKs57QzSyib6UqXpEdy76T1aUdFxJt1w9318Z8DJ73XzbnWHKEZP9Yjg712N5kMmP4QzS9iC9\", ...]\n"
-            "    },\n"
-            "    \"sapling\": [ -- each element in this list represents a set of diversified addresses derived from a single IVK. \n"
-            "      {\n"
-            "        \"zip32KeyPath\": \"m/32'/133'/0'\", -- optional field, not present for imported/watchonly sources,\n"
-            "        \"addresses\": [\n"
-            "          \"zs1z7rejlpsa98s2rrrfkwmaxu53e4ue0ulcrw0h4x5g8jl04tak0d3mm47vdtahatqrlkngh9slya\",\n"
-            "          ...\n"
-            "        ]\n"
-            "      },\n"
-            "      ...\n"
-            "    ],\n"
             "    \"unified\": [ -- each element in this list represents a set of diversified Unified Addresses derived from a single UFVK.\n"
             "      {\n"
             "        \"account\": 0,\n"
@@ -613,10 +600,10 @@ UniValue listaddresses(const UniValue& params, bool fHelp)
             "          {\n"
             "            \"diversifier_index\": 0,\n"
             "            \"receiver_types\": [\n"
-            "              \"sapling\",\n"
+            "              \"orchard\",\n"
             "               ...\n"
             "            ],\n"
-            "            \"address\": \"...\"\n"
+            "            \"address\": \"<unified_address>\"\n"
             "          },\n"
             "          ...\n"
             "        ]\n"
@@ -2795,18 +2782,16 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
             "3. includeWatchonly (bool, optional, default=false) Also include watchonly addresses (see 'z_importviewingkey')\n"
             "4. \"addresses\"      (string) A json array of shielded addresses to filter on.  Duplicate addresses not allowed.\n"
             "    [\n"
-            "      \"address\"     (string) Sprout, Sapling, or Unified address\n"
+            "      \"address\"     (string) Unified address\n"
             "      ,...\n"
             "    ]\n"
             "5. " + asOfHeightMessage(true) +
-            "\nResult (output indices for only one value pool will be present):\n"
+            "\nResult:\n"
             "[                             (array of json object)\n"
             "  {\n"
             "    \"txid\" : \"txid\",                   (string) the transaction id \n"
-            "    \"pool\" : \"sprout|sapling|orchard\",   (string) The shielded value pool\n"
-            "    \"jsindex\" (sprout) : n,            (numeric) the joinsplit index\n"
-            "    \"jsoutindex\" (sprout) : n,         (numeric) the output index of the joinsplit\n"
-            "    \"outindex\" (sapling, orchard) : n, (numeric) the Sapling output or Orchard action index\n"
+            "    \"pool\" : \"orchard\",                (string) The shielded value pool\n"
+            "    \"outindex\" : n,                    (numeric) the Orchard action index\n"
             "    \"confirmations\" : n,               (numeric) the number of confirmations\n"
             "    \"spendable\" : true|false,          (boolean) true if note can be spent by wallet, false if address is watchonly\n"
             "    \"account\" : n,                     (numeric, optional) the unified account ID, if applicable\n"
@@ -2821,8 +2806,7 @@ UniValue z_listunspent(const UniValue& params, bool fHelp)
 
             "\nExamples\n"
             + HelpExampleCli("z_listunspent", "")
-            + HelpExampleCli("z_listunspent", "6 9999999 false \"[\\\"ztbx5DLDxa5ZLFTchHhoPNkKs57QzSyib6UqXpEdy76T1aUdFxJt1w9318Z8DJ73XzbnWHKEZP9Yjg712N5kMmP4QzS9iC9\\\",\\\"ztfaW34Gj9FrnGUEf833ywDVL62NWXBM81u6EQnM6VR45eYnXhwztecW1SjxA7JrmAXKJhxhj3vDNEpVCQoSvVoSpmbhtjf\\\"]\"")
-            + HelpExampleRpc("z_listunspent", "6 9999999 false \"[\\\"ztbx5DLDxa5ZLFTchHhoPNkKs57QzSyib6UqXpEdy76T1aUdFxJt1w9318Z8DJ73XzbnWHKEZP9Yjg712N5kMmP4QzS9iC9\\\",\\\"ztfaW34Gj9FrnGUEf833ywDVL62NWXBM81u6EQnM6VR45eYnXhwztecW1SjxA7JrmAXKJhxhj3vDNEpVCQoSvVoSpmbhtjf\\\"]\"")
+            + HelpExampleCli("z_listunspent", "6 9999999 false \"[\\\"<unified_address>\\\"]\"")
         );
 
     RPCTypeCheck(params, boost::assign::list_of(UniValue::VNUM)(UniValue::VNUM)(UniValue::VBOOL)(UniValue::VARR));
@@ -3235,18 +3219,14 @@ UniValue z_getnewaddress(const UniValue& params, bool fHelp)
             + Deprecated(fEnableZGetNewAddress,
                          "z_getnewaddress",
                          "Please use z_getnewaccount and z_getaddressforaccount instead.") +
+            "\nDEPRECATED: Use z_getnewaccount and z_getaddressforaccount instead.\n"
             "\nReturns a new shielded address for receiving payments.\n"
-            "\nWith no arguments, this currently returns a Sapling address (but that\n"
-            "should not be relied on).\n"
-            "Generating a Sprout address is not allowed after Canopy has activated.\n"
             "\nArguments:\n"
-            "1. \"type\"         (string, optional, default=\"" + defaultType + "\") The type of address. One of [\""
-            + ADDR_TYPE_SPROUT + "\", \"" + ADDR_TYPE_SAPLING + "\"].\n"
+            "None\n"
             "\nResult:\n"
             "\"junocashaddress\"    (string) The new shielded address.\n"
             "\nExamples:\n"
             + HelpExampleCli("z_getnewaddress", "")
-            + HelpExampleCli("z_getnewaddress", ADDR_TYPE_SAPLING)
             + HelpExampleRpc("z_getnewaddress", "")
         );
 
@@ -3341,14 +3321,14 @@ UniValue z_getaddressforaccount(const UniValue& params, bool fHelp)
             "{\n"
             "  \"account\": n,                          (numeric) the specified account number\n"
             "  \"diversifier_index\": n,                (numeric) the index specified or chosen\n"
-            "  \"receiver_types\": [\"orchard\",...]\",   (json array of string) the receiver types that the UA contains (valid values are \"p2pkh\", \"sapling\", \"orchard\")\n"
+            "  \"receiver_types\": [\"orchard\",...]\",   (json array of string) the receiver types that the UA contains (valid values are \"p2pkh\", \"orchard\")\n"
             "  \"address\"                              (string) The corresponding address\n"
             "}\n"
             "\nExamples:\n"
-            + HelpExampleCli("z_getaddressforaccount", "4")
-            + HelpExampleCli("z_getaddressforaccount", "4 '[]' 1")
-            + HelpExampleCli("z_getaddressforaccount", "4 '[\"p2pkh\",\"sapling\",\"orchard\"]' 1")
-            + HelpExampleRpc("z_getaddressforaccount", "4")
+            + HelpExampleCli("z_getaddressforaccount", "0")
+            + HelpExampleCli("z_getaddressforaccount", "0 '[]' 1")
+            + HelpExampleCli("z_getaddressforaccount", "0 '[\"p2pkh\",\"orchard\"]' 1")
+            + HelpExampleRpc("z_getaddressforaccount", "0")
         );
 
     // cs_main is required for obtaining the current height, for
@@ -3368,7 +3348,7 @@ UniValue z_getaddressforaccount(const UniValue& params, bool fHelp)
                 throw JSONRPCError(
                         RPC_INVALID_PARAMETER,
                         strprintf(
-                            "%s %s. Arguments must be “p2pkh”, “sapling”, or “orchard”",
+                            "%s %s. Arguments must be “p2pkh” or “orchard”.",
                             FormatList(
                                     invalidReceivers,
                                     "and",
@@ -3750,10 +3730,10 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
             "1. \"address\"      (string) The shielded address.\n"
             "2. minconf        (numeric, optional, default=1) Only include transactions confirmed at least this many times.\n"
             "3. " + asOfHeightMessage(true) +
-            "\nResult (output indices for only one value pool will be present):\n"
+            "\nResult:\n"
             "[\n"
             "  {\n"
-            "    \"pool\": \"pool\"                (string) one of (\"transparent\", \"sprout\", \"sapling\", \"orchard\")\n"
+            "    \"pool\": \"pool\"                (string) one of (\"transparent\", \"orchard\")\n"
             "    \"txid\": \"txid\",               (string) the transaction id\n"
             "    \"amount\": xxxxx,              (numeric) the amount of value in the note\n"
             "    \"amountZat\" : xxxx            (numeric) The amount in " + MINOR_CURRENCY_UNIT + "\n"
@@ -3763,16 +3743,14 @@ UniValue z_listreceivedbyaddress(const UniValue& params, bool fHelp)
             "    \"blockheight\": n,             (numeric) The block height containing the transaction\n"
             "    \"blockindex\": n,              (numeric) The block index containing the transaction.\n"
             "    \"blocktime\": xxx,             (numeric) The transaction time in seconds since epoch (midnight Jan 1 1970 GMT).\n"
-            "    \"jsindex\" (sprout) : n,       (numeric) the joinsplit index\n"
-            "    \"jsoutindex\" (sprout) : n,    (numeric) the output index of the joinsplit\n"
-            "    \"outindex\" (sapling, orchard) : n, (numeric) the Sapling output index, or the Orchard action index\n"
+            "    \"outindex\" : n,               (numeric) the Orchard action index\n"
             "    \"change\": true|false,         (boolean) true if the output was received to a change address\n"
             "  },\n"
             "...\n"
             "]\n"
             "\nExamples:\n"
-            + HelpExampleCli("z_listreceivedbyaddress", "\"ztfaW34Gj9FrnGUEf833ywDVL62NWXBM81u6EQnM6VR45eYnXhwztecW1SjxA7JrmAXKJhxhj3vDNEpVCQoSvVoSpmbhtjf\"")
-            + HelpExampleRpc("z_listreceivedbyaddress", "\"ztfaW34Gj9FrnGUEf833ywDVL62NWXBM81u6EQnM6VR45eYnXhwztecW1SjxA7JrmAXKJhxhj3vDNEpVCQoSvVoSpmbhtjf\"")
+            + HelpExampleCli("z_listreceivedbyaddress", "\"<unified_address>\"")
+            + HelpExampleRpc("z_listreceivedbyaddress", "\"<unified_address>\"")
         );
 
     LOCK2(cs_main, pwalletMain->cs_wallet);
@@ -4922,10 +4900,8 @@ UniValue z_sendmany(const UniValue& params, bool fHelp)
             "\nResult:\n"
             "\"operationid\"          (string) An operationid to pass to z_getoperationstatus to get the result of the operation.\n"
             "\nExamples:\n"
-            + HelpExampleCli("z_sendmany", "\"t1M72Sfpbz1BPpXFHz9m3CdqATR44Jvaydd\" '[{\"address\": \"ztfaW34Gj9FrnGUEf833ywDVL62NWXBM81u6EQnM6VR45eYnXhwztecW1SjxA7JrmAXKJhxhj3vDNEpVCQoSvVoSpmbhtjf\", \"amount\": 5.0}]'")
-            + HelpExampleCli("z_sendmany", "\"ANY_TADDR\" '[{\"address\": \"t1M72Sfpbz1BPpXFHz9m3CdqATR44Jvaydd\", \"amount\": 2.0}]'")
-            + HelpExampleCli("z_sendmany", "\"ANY_TADDR\" '[{\"address\": \"t1M72Sfpbz1BPpXFHz9m3CdqATR44Jvaydd\", \"amount\": 2.0}]' 1 5000")
-            + HelpExampleRpc("z_sendmany", "\"t1M72Sfpbz1BPpXFHz9m3CdqATR44Jvaydd\", [{\"address\": \"ztfaW34Gj9FrnGUEf833ywDVL62NWXBM81u6EQnM6VR45eYnXhwztecW1SjxA7JrmAXKJhxhj3vDNEpVCQoSvVoSpmbhtjf\", \"amount\": 5.0}]")
+            + HelpExampleCli("z_sendmany", "\"<from_unified_address>\" '[{\"address\": \"<to_unified_address>\", \"amount\": 5.0}]'")
+            + HelpExampleCli("z_sendmany", "\"<from_unified_address>\" '[{\"address\": \"<to_unified_address>\", \"amount\": 2.0}]' 1 5000")
         );
 
     LOCK2(cs_main, pwalletMain->cs_wallet);
@@ -5570,30 +5546,24 @@ UniValue z_mergetoaddress(const UniValue& params, bool fHelp)
             "\n\nThe number of UTXOs and notes selected for merging can be limited by the caller.  If the transparent limit"
             "\nparameter is set to zero will mean limit the number of UTXOs based on the size of the transaction.  Any limit is"
             "\nconstrained by the consensus rule defining a maximum transaction size of "
-            + strprintf("%d bytes before Sapling, and %d", MAX_TX_SIZE_BEFORE_SAPLING, MAX_TX_SIZE_AFTER_SAPLING)
-            + "\nbytes once Sapling activates."
+            + strprintf("%d bytes.", MAX_TX_SIZE_AFTER_SAPLING)
             + HelpRequiringPassphrase() + "\n"
             "\nArguments:\n"
             "1. fromaddresses         (array, required) A JSON array with addresses.\n"
-            "                         The following special strings are accepted inside the array:\n"
+            "                         The following special string is accepted inside the array:\n"
             "                             - \"ANY_TADDR\":   Merge UTXOs from any taddrs belonging to the wallet.\n"
-            "                             - \"ANY_SPROUT\":  Merge notes from any Sprout zaddrs belonging to the wallet.\n"
-            "                             - \"ANY_SAPLING\": Merge notes from any Sapling zaddrs belonging to the wallet.\n"
-            "                         While it is possible to use a variety of different combinations of addresses and the above values,\n"
-            "                         it is not possible to send funds from both sprout and sapling addresses simultaneously. If a special\n"
-            "                         string is given, any given addresses of that address type will be counted as duplicates and cause an error.\n"
             "    [\n"
-            "      \"address\"          (string) Can be a taddr or a zaddr\n"
+            "      \"address\"          (string) Can be a taddr or a unified address\n"
             "      ,...\n"
             "    ]\n"
-            "2. \"toaddress\"           (string, required) The taddr or zaddr to send the funds to.\n"
+            "2. \"toaddress\"           (string, required) The unified address to send the funds to.\n"
             "3. fee                   (numeric, optional, default=null) The fee amount in " + CURRENCY_UNIT + " to attach to this transaction. The default behavior\n"
             "                         is to use a fee calculated according to ZIP 317.\n"
             "4. transparent_limit     (numeric, optional, default="
             + strprintf("%d", MERGE_TO_ADDRESS_DEFAULT_TRANSPARENT_LIMIT) + ") Limit on the maximum number of UTXOs to merge.  Set to 0 to use as many as will fit in the transaction.\n"
             "5. shielded_limit        (numeric, optional, default="
-            + strprintf("%d Sprout or %d Sapling Notes", MERGE_TO_ADDRESS_DEFAULT_SPROUT_LIMIT, MERGE_TO_ADDRESS_DEFAULT_SAPLING_LIMIT) + ") Limit on the maximum number of notes to merge.  Set to 0 to merge as many as will fit in the transaction.\n"
-            "6. \"memo\"                (string, optional) Encoded as hex. When toaddress is a zaddr, this will be stored in the memo field of the new note.\n"
+            + strprintf("%d", MERGE_TO_ADDRESS_DEFAULT_SAPLING_LIMIT) + ") Limit on the maximum number of notes to merge.  Set to 0 to merge as many as will fit in the transaction.\n"
+            "6. \"memo\"                (string, optional) Encoded as hex. When toaddress is a unified address, this will be stored in the memo field of the new note.\n"
             "\nResult:\n"
             "{\n"
             "  \"remainingUTXOs\": xxx               (numeric) Number of UTXOs still available for merging.\n"
@@ -5607,8 +5577,7 @@ UniValue z_mergetoaddress(const UniValue& params, bool fHelp)
             "  \"opid\": xxx                         (string) An operationid to pass to z_getoperationstatus to get the result of the operation.\n"
             "}\n"
             "\nExamples:\n"
-            + HelpExampleCli("z_mergetoaddress", "'[\"ANY_SAPLING\", \"t1M72Sfpbz1BPpXFHz9m3CdqATR44Jvaydd\"]' ztestsapling19rnyu293v44f0kvtmszhx35lpdug574twc0lwyf4s7w0umtkrdq5nfcauxrxcyfmh3m7slemqsj")
-            + HelpExampleRpc("z_mergetoaddress", "[\"ANY_SAPLING\", \"t1M72Sfpbz1BPpXFHz9m3CdqATR44Jvaydd\"], \"ztestsapling19rnyu293v44f0kvtmszhx35lpdug574twc0lwyf4s7w0umtkrdq5nfcauxrxcyfmh3m7slemqsj\"")
+            + HelpExampleCli("z_mergetoaddress", "'[\"ANY_TADDR\"]' \"<unified_address>\"")
         );
 
     LOCK2(cs_main, pwalletMain->cs_wallet);
