@@ -423,15 +423,14 @@ InvolvesUnifiedAddress(
     return hasUASender || hasUARecipient;
 }
 
-// Determines which `TransactionStrategy` should be used for the “LegacyCompat”
+// Determines which `TransactionStrategy` should be used for the "LegacyCompat"
 // policy given the set of addresses involved.
 PrivacyPolicy
 InterpretLegacyCompat(const std::optional<PaymentAddress>& sender,
                       const std::set<PaymentAddress>& recipients)
 {
-    return !fEnableLegacyPrivacyStrategy || InvolvesUnifiedAddress(sender, recipients)
-        ? PrivacyPolicy::FullPrivacy
-        : PrivacyPolicy::AllowFullyTransparent;
+    // Juno Cash: Privacy policy disabled - transparent addresses only used for mining
+    return PrivacyPolicy::NoPrivacy;
 }
 
 // Provides the final `TransactionStrategy` to be used for a transaction.
@@ -5443,8 +5442,8 @@ UniValue z_shieldcoinbase(const UniValue& params, bool fHelp)
         memo = ParseMemo(params[4]);
     }
 
-    // For Orchard-only shielding, we always allow revealed senders (transparent inputs)
-    auto strategy = TransactionStrategy(PrivacyPolicy::AllowRevealedSenders);
+    // Juno Cash: Privacy policy disabled - transparent addresses only used for mining
+    auto strategy = TransactionStrategy(PrivacyPolicy::NoPrivacy);
 
     // Validate the from address
     auto fromaddress = params[0].get_str();
