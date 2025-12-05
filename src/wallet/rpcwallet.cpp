@@ -5096,6 +5096,65 @@ UniValue z_sendmany(const UniValue& params, bool fHelp)
     return operationId;
 }
 
+UniValue z_send(const UniValue& params, bool fHelp)
+{
+    if (!EnsureWalletIsAvailable(fHelp))
+        return NullUniValue;
+
+    if (fHelp || params.size() < 3 || params.size() > 6)
+        throw runtime_error(
+            "z_send \"fromaddress\" \"toaddress\" amount ( \"memo\" ) ( minconf ) ( fee )\n"
+            "\nSend funds to a single recipient. This is a simplified wrapper around z_sendmany for sending"
+            "\nto one address. Amounts are decimal numbers with at most 8 digits of precision."
+            + HelpRequiringPassphrase() + "\n"
+            "\nArguments:\n"
+            "1. \"fromaddress\"         (string, required) The sending address. Can be a transparent or Unified Address,\n"
+            "                           or \"ANY_TADDR\" to select from any transparent address in the wallet.\n"
+            "2. \"toaddress\"           (string, required) The recipient address (transparent or Unified Address).\n"
+            "3. amount                (numeric, required) The amount to send in " + CURRENCY_UNIT + ".\n"
+            "4. \"memo\"                (string, optional) If sending to a shielded address, a hex-encoded memo field.\n"
+            "5. minconf               (numeric, optional, default=" + strprintf("%u", DEFAULT_NOTE_CONFIRMATIONS) + ") Only use funds confirmed at least this many times.\n"
+            "6. fee                   (numeric, optional, default=null) Fee calculated according to ZIP 317 if not specified.\n"
+            "\nResult:\n"
+            "\"operationid\"          (string) An operationid to pass to z_getoperationstatus to get the result.\n"
+            "\nExamples:\n"
+            + HelpExampleCli("z_send", "\"ANY_TADDR\" \"<unified_address>\" 1.5")
+            + HelpExampleCli("z_send", "\"<unified_address>\" \"<unified_address>\" 2.0 \"\" 1 0.0001")
+            + HelpExampleRpc("z_send", "\"ANY_TADDR\", \"<unified_address>\", 1.5")
+        );
+
+    // Construct the amounts array for z_sendmany
+    UniValue recipient(UniValue::VOBJ);
+    recipient.pushKV("address", params[1].get_str());
+    recipient.pushKV("amount", params[2]);
+    if (params.size() > 3 && !params[3].isNull() && !params[3].get_str().empty()) {
+        recipient.pushKV("memo", params[3].get_str());
+    }
+
+    UniValue amounts(UniValue::VARR);
+    amounts.push_back(recipient);
+
+    // Build parameters for z_sendmany
+    UniValue sendmanyParams(UniValue::VARR);
+    sendmanyParams.push_back(params[0]); // fromaddress
+    sendmanyParams.push_back(amounts);   // amounts array
+
+    // minconf (param 4 -> sendmany param 2)
+    if (params.size() > 4 && !params[4].isNull()) {
+        sendmanyParams.push_back(params[4]);
+    } else {
+        sendmanyParams.push_back(UniValue(static_cast<int>(DEFAULT_NOTE_CONFIRMATIONS)));
+    }
+
+    // fee (param 5 -> sendmany param 3)
+    if (params.size() > 5 && !params[5].isNull()) {
+        sendmanyParams.push_back(params[5]);
+    }
+
+    // Call z_sendmany with constructed parameters
+    return z_sendmany(sendmanyParams, false);
+}
+
 UniValue z_setmigration(const UniValue& params, bool fHelp) {
     if (!EnsureWalletIsAvailable(fHelp))
         return NullUniValue;
@@ -6046,6 +6105,7 @@ static const CRPCCommand commands[] =
     { "wallet",             "z_getbalanceforaccount",   &z_getbalanceforaccount,   false },
     { "wallet",             "z_mergetoaddress",         &z_mergetoaddress,         false },
     { "wallet",             "z_sendmany",               &z_sendmany,               false },
+    { "wallet",             "z_send",                   &z_send,                   false },
     { "wallet",             "z_setmigration",           &z_setmigration,           false },
     { "wallet",             "z_getmigrationstatus",     &z_getmigrationstatus,     false },
     { "wallet",             "z_shieldcoinbase",         &z_shieldcoinbase,         false },
