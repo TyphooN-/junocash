@@ -960,6 +960,26 @@ static bool AttemptToEvictConnection(bool fPreferNewConnection) {
         }
     }
 
+    // Juno Cash: Preferential peering for block 40000 lockin
+    const int ORCHARD_TRANSPARENT_LOCK_HEIGHT = 40000;
+    const int ORCHARD_TRANSPARENT_LOCK_PROTOCOL = 170141;
+    // 4320 blocks = 3 days at 60-second blocks (matches Zcash's 3-day window)
+    const int JUNO_PEER_PREFERENCE_BLOCK_PERIOD = 4320;
+
+    if (height < ORCHARD_TRANSPARENT_LOCK_HEIGHT &&
+        height >= ORCHARD_TRANSPARENT_LOCK_HEIGHT - JUNO_PEER_PREFERENCE_BLOCK_PERIOD)
+    {
+        vTmpEvictionCandidates.clear();
+        for (const NodeEvictionCandidate &node : vEvictionCandidates) {
+            if (node.nVersion < ORCHARD_TRANSPARENT_LOCK_PROTOCOL) {
+                vTmpEvictionCandidates.push_back(node);
+            }
+        }
+        if (vTmpEvictionCandidates.size() > 0) {
+            vEvictionCandidates = vTmpEvictionCandidates;
+        }
+    }
+
     // Deterministically select 4 peers to protect by netgroup.
     // An attacker cannot predict which netgroups will be protected
     std::sort(vEvictionCandidates.begin(), vEvictionCandidates.end(), CompareNetGroupKeyed);

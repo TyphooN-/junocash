@@ -924,10 +924,16 @@ bool ContextualCheckTransaction(
             REJECT_INVALID, "bad-txns-sapling-not-supported");
     }
 
+    // Juno Cash: Height-activated fix for value balance sign convention
+    const int ORCHARD_TRANSPARENT_LOCK_HEIGHT = 40000;
+
     // Juno Cash: Ban Orchard-to-transparent transactions (privacy protection)
-    // If transaction has Orchard actions and transparent outputs with negative value balance
-    // (funds leaving Orchard pool), reject it
-    if (orchard_bundle.GetNumActions() > 0 && !tx.vout.empty() && orchard_bundle.GetValueBalance() < 0) {
+    // If transaction has Orchard actions and transparent outputs with positive value balance
+    // (funds leaving Orchard pool to transparent), reject it
+    // Note: Positive valueBalance means value is flowing OUT of Orchard (unshielding)
+    //       Negative valueBalance means value is flowing INTO Orchard (shielding)
+    if (nHeight >= ORCHARD_TRANSPARENT_LOCK_HEIGHT &&
+        orchard_bundle.GetNumActions() > 0 && !tx.vout.empty() && orchard_bundle.GetValueBalance() > 0) {
         return state.DoS(
             DOS_LEVEL_BLOCK,
             error("ContextualCheckTransaction(): Orchard-to-transparent transactions not allowed"),
@@ -937,11 +943,12 @@ bool ContextualCheckTransaction(
     // Juno Cash: Ban transparent-to-transparent transactions (force shielding)
     // Transparent outputs can only be sent to Orchard, not to other transparent addresses
     // Exception: Coinbase transactions are allowed (miners receive transparent rewards)
-    if (!tx.IsCoinBase() && !tx.vin.empty() && !tx.vout.empty()) {
+    if (nHeight >= ORCHARD_TRANSPARENT_LOCK_HEIGHT &&
+        !tx.IsCoinBase() && !tx.vin.empty() && !tx.vout.empty()) {
         // Transaction has transparent inputs and outputs
-        // Check if funds are going into Orchard (positive value balance)
-        if (orchard_bundle.GetValueBalance() <= 0) {
-            // No funds going to Orchard, this is a pure transparent-to-transparent tx
+        // Check if funds are going into Orchard (negative value balance means shielding)
+        if (orchard_bundle.GetValueBalance() >= 0) {
+            // No funds going to Orchard (zero or positive means not shielding)
             return state.DoS(
                 DOS_LEVEL_BLOCK,
                 error("ContextualCheckTransaction(): Transparent-to-transparent transactions not allowed, must shield to Orchard"),
