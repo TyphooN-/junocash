@@ -1328,7 +1328,7 @@ static void toggleBenchmark(int screenHeight)
 
         LogPrintf("Starting benchmark mode (auto-apply: %s)\n", autoApply ? "yes" : "no");
 
-        // Save current thread count
+        // Save current thread count to restore later
         int currentThreads = GetArg("-genproclimit", boost::thread::hardware_concurrency());
         if (currentThreads == -1 || currentThreads == 0) {
             currentThreads = boost::thread::hardware_concurrency();
@@ -1339,8 +1339,10 @@ static void toggleBenchmark(int screenHeight)
         LogPrintf("Stopping current mining to begin benchmark\n");
         GenerateBitcoins(false, 0, Params());
 
-        // Determine max threads
-        int maxThreads = currentThreads;
+        // Determine max threads - always test all available threads
+        // Do NOT use currentThreads here, as that's just what was configured
+        int maxThreads = boost::thread::hardware_concurrency();
+        LogPrintf("Benchmark will test 1 to %d threads (all available)\n", maxThreads);
         benchmarkMaxThreads = maxThreads;
         benchmarkMode = true;
         benchmarkResults.clear();
