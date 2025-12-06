@@ -1090,11 +1090,55 @@ static bool writeOptimalThreadsToConfig(int threads, const std::string& mode = "
         // Get config file path
         boost::filesystem::path configPath = GetConfigFile(GetArg("-conf", BITCOIN_CONF_FILENAME));
 
-        // Open file in append mode
-        std::ofstream configFile(configPath.string(), std::ios::app);
+        // Read existing config file and filter out old benchmark settings
+        std::vector<std::string> existingLines;
+        std::ifstream configFileRead(configPath.string());
+        if (configFileRead.is_open()) {
+            std::string line;
+            bool skipNextLines = false;
+            while (std::getline(configFileRead, line)) {
+                // Skip benchmark comment and subsequent settings
+                if (line.find("# Optimal configuration determined by benchmark") != std::string::npos) {
+                    skipNextLines = true;
+                    continue;
+                }
+
+                // Skip old benchmark-related settings
+                if (skipNextLines) {
+                    if (line.find("randomxfastmode=") == 0 ||
+                        line.find("randomxhugepages=") == 0 ||
+                        line.find("genproclimit=") == 0 ||
+                        line.find("gen=") == 0 ||
+                        line.find("# Best mode:") == 0 ||
+                        line.empty()) {
+                        continue;  // Skip these lines
+                    }
+                    skipNextLines = false;  // Resume keeping lines
+                }
+
+                // Also remove any standalone duplicates from earlier runs
+                if (line.find("randomxfastmode=") == 0 ||
+                    line.find("randomxhugepages=") == 0 ||
+                    line.find("genproclimit=") == 0 ||
+                    line.find("gen=") == 0) {
+                    continue;  // Skip duplicates
+                }
+
+                existingLines.push_back(line);
+            }
+            configFileRead.close();
+        }
+
+        // Write back the filtered config plus new benchmark settings
+        std::ofstream configFile(configPath.string(), std::ios::trunc);
         if (!configFile.is_open()) {
             LogPrintf("ERROR: Could not open config file for writing: %s\n", configPath.string());
             return false;
+        }
+
+        // Write existing non-benchmark lines
+        for (const auto& line : existingLines) {
+            configFile << line << "\n";
         }
 
         // Write the optimal settings with timestamp
@@ -1119,9 +1163,10 @@ static bool writeOptimalThreadsToConfig(int threads, const std::string& mode = "
         }
 
         configFile << "genproclimit=" << threads << "\n";
+        configFile << "gen=1\n";  // Enable mining on startup
         configFile.close();
 
-        LogPrintf("Wrote optimal config (mode=%s, threads=%d) to: %s\n", mode, threads, configPath.string());
+        LogPrintf("Wrote optimal config (mode=%s, threads=%d, gen=1) to: %s\n", mode, threads, configPath.string());
         return true;
     } catch (const std::exception& e) {
         LogPrintf("ERROR: Failed to write to config file: %s\n", e.what());
@@ -2009,6 +2054,13 @@ void ThreadBenchmarkMining()
         GenerateBitcoins(false, 0, Params());
     } else {
         LogPrintf("Benchmark ending, mining continues with optimal threads\n");
+
+        // Reset counters and timer for accurate hashrate display after benchmark
+        LogPrintf("Resetting hashrate counters for post-benchmark mining\n");
+        MilliSleep(500);  // Wait for mining to stabilize
+        ehSolverRuns.value.store(0);
+        solutionTargetChecks.value.store(0);
+        miningTimer.zeroize();
     }
 
     benchmarkLog.close();
