@@ -2487,7 +2487,7 @@ void ThreadShowMetricsScreen()
         std::cout << "\e[2J\e[H" << std::flush;  // Clear screen and move to home
         drawBoxTop("");
         drawCentered("Juno Cash", "\e[1;33m");
-        drawCentered("Privacy Money for All", "\e[1;36m");
+        drawCentered("Private Money", "\e[1;36m");
         drawCentered(FormatFullVersion() + " - " + WhichNetwork() + " - RandomX", "\e[0;37m");
         drawBoxBottom();
         std::cout << std::endl;
