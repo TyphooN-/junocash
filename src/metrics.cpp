@@ -1974,6 +1974,9 @@ void ThreadBenchmarkMining()
                 // Exit benchmark mode BEFORE starting normal mining
                 benchmarkMode = false;
 
+                // Enable mining flag
+                mapArgs["-gen"] = "1";
+
                 // Start mining with optimal configuration
                 LogPrintf("Starting mining with optimal configuration\n");
                 GenerateBitcoins(true, bestThreads, Params());
@@ -2008,6 +2011,9 @@ void ThreadBenchmarkMining()
 
                 // Exit benchmark mode BEFORE starting normal mining
                 benchmarkMode = false;
+
+                // Enable mining flag
+                mapArgs["-gen"] = "1";
 
                 GenerateBitcoins(true, bestThreads, Params());
                 miningStartTime = GetTime();  // Track start time for warmup display
@@ -2094,6 +2100,9 @@ void ThreadBenchmarkMining()
                     // Exit benchmark mode BEFORE starting normal mining
                     benchmarkMode = false;
 
+                    // Enable mining flag
+                    mapArgs["-gen"] = "1";
+
                     LogPrintf("Starting mining with %s mode, %d threads (from partial results)\n", bestMode, bestThreads);
                     GenerateBitcoins(true, bestThreads, Params());
                     miningStartTime = GetTime();  // Track start time for warmup display
@@ -2123,6 +2132,9 @@ void ThreadBenchmarkMining()
 
                     // Exit benchmark mode BEFORE starting normal mining
                     benchmarkMode = false;
+
+                    // Enable mining flag
+                    mapArgs["-gen"] = "1";
 
                     GenerateBitcoins(true, bestThreads, Params());
                     miningStartTime = GetTime();  // Track start time for warmup display
