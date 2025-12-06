@@ -317,6 +317,18 @@ void ThreadNotifyWallets(CBlockIndex *pindexLastTip)
 
         // Closure that will add a block from blockStack to batchScanners.
         auto batchScanConnectedBlock = [&](const CachedBlockData& blockData) {
+            // Check if the block has data before trying to read it.
+            // This handles the race condition where:
+            // 1. ThreadNotifyWallets collects block indices under cs_main
+            // 2. A chain invalidation/reorg happens (e.g., block fails validation)
+            // 3. The block was never written to disk (BLOCK_HAVE_DATA not set)
+            // In this case, we skip the block rather than shutting down.
+            if (!(blockData.pindex->nStatus & BLOCK_HAVE_DATA)) {
+                LogPrintf("%s: Skipping block %s at height %d - block data not available (chain may have been invalidated)\n",
+                        __func__, blockData.pindex->GetBlockHash().GetHex(), blockData.pindex->nHeight);
+                return;
+            }
+
             // Read block from disk.
             CBlock block;
             if (!ReadBlockFromDisk(block, blockData.pindex, chainParams.GetConsensus())) {
@@ -377,6 +389,14 @@ void ThreadNotifyWallets(CBlockIndex *pindexLastTip)
             // might eventually be removed entirely.
             auto pindexScan = pindexLastTip;
             while (pindexScan && pindexScan != pindexFork) {
+                // Check if block data is available (handles race with chain invalidation)
+                if (!(pindexScan->nStatus & BLOCK_HAVE_DATA)) {
+                    LogPrintf("%s: Skipping disconnect of block %s at height %d - block data not available\n",
+                            __func__, pindexScan->GetBlockHash().GetHex(), pindexScan->nHeight);
+                    pindexScan = pindexScan->pprev;
+                    continue;
+                }
+
                 // Read block from disk.
                 CBlock block;
                 if (!ReadBlockFromDisk(block, pindexScan, chainParams.GetConsensus())) {
@@ -426,6 +446,14 @@ void ThreadNotifyWallets(CBlockIndex *pindexLastTip)
 
         // Notify block disconnects
         while (pindexLastTip && pindexLastTip != pindexFork) {
+            // Check if block data is available (handles race with chain invalidation)
+            if (!(pindexLastTip->nStatus & BLOCK_HAVE_DATA)) {
+                LogPrintf("%s: Skipping wallet disconnect notification for block %s at height %d - block data not available\n",
+                        __func__, pindexLastTip->GetBlockHash().GetHex(), pindexLastTip->nHeight);
+                pindexLastTip = pindexLastTip->pprev;
+                continue;
+            }
+
             // Read block from disk.
             CBlock block;
             if (!ReadBlockFromDisk(block, pindexLastTip, chainParams.GetConsensus())) {
@@ -483,6 +511,15 @@ void ThreadNotifyWallets(CBlockIndex *pindexLastTip)
                 (blockStackScanned != blockStack.rend())
             )) {
                 auto& blockData = blockStack.back();
+
+                // Check if block data is available (handles race with chain invalidation)
+                if (!(blockData.pindex->nStatus & BLOCK_HAVE_DATA)) {
+                    LogPrintf("%s: Skipping wallet connect notification for block %s at height %d - block data not available\n",
+                            __func__, blockData.pindex->GetBlockHash().GetHex(), blockData.pindex->nHeight);
+                    assert(blockStack.rbegin() != blockStackScanned);
+                    blockStack.pop_back();
+                    continue;
+                }
 
                 // Read block from disk.
                 CBlock block;
