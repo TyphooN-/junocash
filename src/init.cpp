@@ -2136,7 +2136,14 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         // Determine max threads - always use all logical threads for benchmarking
         // Ignore any genproclimit setting to ensure full system is tested
         int maxThreads = boost::thread::hardware_concurrency();
-        LogPrintf("Benchmark will test 1 to %d threads (all logical cores)\n", maxThreads);
+        if (maxThreads == 0) {
+            // hardware_concurrency() returned 0, fall back to reading /proc/cpuinfo
+            maxThreads = std::thread::hardware_concurrency();
+            if (maxThreads == 0) maxThreads = 1;  // Ultimate fallback
+            LogPrintf("WARNING: boost::thread::hardware_concurrency() returned 0, using std::thread value: %d\n", maxThreads);
+        }
+        LogPrintf("Benchmark will test 1 to %d threads (boost::thread::hardware_concurrency=%d)\n",
+                  maxThreads, (int)boost::thread::hardware_concurrency());
 
         // Enable mining
         enableMining = true;
