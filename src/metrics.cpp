@@ -149,6 +149,10 @@ static const int BENCHMARK_DURATION_SECONDS = 20; // Mine for 20 seconds per thr
 static boost::thread* benchmarkThread = nullptr;
 static std::atomic<bool> benchmarkAutoApply(false); // Auto-apply optimal threads to config
 
+// Regular mining warmup tracking
+static std::atomic<int64_t> miningStartTime(0);  // Track when mining started for warmup detection
+static const int MINING_WARMUP_SECONDS = 10;  // Show warmup status for first 10 seconds
+
 // Store benchmark results
 struct BenchmarkResult {
     int threads;
@@ -686,7 +690,20 @@ int printMiningStatus(bool mining)
     if (mining) {
         auto nThreads = miningTimer.threadCount();
         if (nThreads > 0) {
-            drawRow("Status", strprintf("\e[1;32m● ACTIVE\e[0m - %d threads", nThreads));
+            // Check if in warmup phase (first 10 seconds after mining starts, or hashrate is 0)
+            int64_t startTime = miningStartTime.load();
+            bool isWarmingUp = false;
+            if (startTime > 0) {
+                int64_t elapsedTime = GetTime() - startTime;
+                double currentHashrate = GetLocalSolPS();
+                isWarmingUp = (elapsedTime < MINING_WARMUP_SECONDS && currentHashrate == 0);
+            }
+
+            if (isWarmingUp) {
+                drawRow("Status", strprintf("\e[1;33m● WARMING UP\e[0m - %d threads", nThreads));
+            } else {
+                drawRow("Status", strprintf("\e[1;32m● ACTIVE\e[0m - %d threads", nThreads));
+            }
             lines++;
 
             // Show block reward
@@ -1074,8 +1091,10 @@ static void toggleMining()
     GenerateBitcoins(!currentlyMining, nThreads, Params());
 
     if (!currentlyMining) {
+        miningStartTime = GetTime();  // Track start time for warmup display
         LogPrintf("User enabled mining with %d threads\n", nThreads);
     } else {
+        miningStartTime = 0;  // Clear start time when mining stops
         LogPrintf("User disabled mining\n");
     }
 }
@@ -1394,6 +1413,7 @@ static void promptForThreads(int screenHeight)
 
                 // Restart mining with new thread count
                 GenerateBitcoins(true, threads, Params());
+                miningStartTime = GetTime();  // Track start time for warmup display
                 LogPrintf("User set mining threads to %d (mining restarted, counters reset)\n", threads);
             } else {
                 LogPrintf("User set mining threads to %d (will apply when mining starts)\n", threads);
@@ -1944,6 +1964,7 @@ void ThreadBenchmarkMining()
                 // Start mining with optimal configuration
                 LogPrintf("Starting mining with optimal configuration\n");
                 GenerateBitcoins(true, bestThreads, Params());
+                miningStartTime = GetTime();  // Track start time for warmup display
 
                 benchmarkLog << "\nAuto-applied optimal settings:\n";
                 benchmarkLog << "  - Updated junocashd.conf with best mode: " << bestMode << "\n";
@@ -1976,6 +1997,7 @@ void ThreadBenchmarkMining()
                 benchmarkMode = false;
 
                 GenerateBitcoins(true, bestThreads, Params());
+                miningStartTime = GetTime();  // Track start time for warmup display
             }
         }
 
@@ -2061,6 +2083,7 @@ void ThreadBenchmarkMining()
 
                     LogPrintf("Starting mining with %s mode, %d threads (from partial results)\n", bestMode, bestThreads);
                     GenerateBitcoins(true, bestThreads, Params());
+                    miningStartTime = GetTime();  // Track start time for warmup display
 
                     benchmarkLog << "\nAuto-applied partial results:\n";
                     benchmarkLog << "  - Updated junocashd.conf with best mode: " << bestMode << "\n";
@@ -2089,6 +2112,7 @@ void ThreadBenchmarkMining()
                     benchmarkMode = false;
 
                     GenerateBitcoins(true, bestThreads, Params());
+                    miningStartTime = GetTime();  // Track start time for warmup display
                 }
             }
         } else {
