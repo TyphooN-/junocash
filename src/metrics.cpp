@@ -564,11 +564,6 @@ int printStats(MetricsStats stats, bool isScreen, bool mining)
             drawRow("Block Height", strprintf("%d / %d", stats.height, netheight));
             lines++;
 
-            // Network Difficulty
-            double difficulty = GetNetworkDifficulty(chainActive.Tip());
-            drawRow("Network Difficulty", strprintf("%.6f", difficulty));
-            lines++;
-
             if (isScreen) {
                 drawProgressBar(downloadPercent);
                 lines++;
