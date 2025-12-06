@@ -262,6 +262,11 @@ bool RandomX_IsFastMode()
     return rx_fast_mode;
 }
 
+bool RandomX_IsUsingHugepages()
+{
+    return rx_use_hugepages;
+}
+
 // Change mode at runtime without full shutdown/reinit
 void RandomX_ChangeMode(bool fastMode, bool useHugePages)
 {

@@ -115,6 +115,12 @@ void RandomX_Init(bool fastMode = false, bool useHugePages = false);
 bool RandomX_IsFastMode();
 
 /**
+ * Check if RandomX is configured to use hugepages.
+ * @return true if hugepages are enabled for RandomX, false otherwise.
+ */
+bool RandomX_IsUsingHugepages();
+
+/**
  * Change RandomX mode at runtime without full shutdown/reinit.
  * This is safe to call while mining - threads will automatically
  * recreate their VMs with the new mode settings.

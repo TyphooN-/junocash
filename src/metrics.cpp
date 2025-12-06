@@ -714,11 +714,11 @@ int printMiningStatus(bool mining)
 
             // Show RandomX mining mode
             bool isFastMode = RandomX_IsFastMode();
-            bool hugepagesEnabled = IsHugepagesEnabled();
+            bool hugepagesInUse = RandomX_IsUsingHugepages();
             std::string miningMode;
 
             if (isFastMode) {
-                if (hugepagesEnabled) {
+                if (hugepagesInUse) {
                     miningMode = "\e[1;32mFast + Hugepages\e[0m";
                 } else {
                     miningMode = "\e[1;36mFast\e[0m";
