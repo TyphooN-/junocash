@@ -2133,11 +2133,10 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         // Benchmark mode: automatically test different thread counts
         LogPrintf("Benchmark mode enabled\n");
 
-        // Determine max threads - use all logical threads (including hyperthreading)
-        int maxThreads = GetArg("-genproclimit", DEFAULT_GENERATE_THREADS);
-        if (maxThreads == -1 || maxThreads == 0) {
-            maxThreads = boost::thread::hardware_concurrency();
-        }
+        // Determine max threads - always use all logical threads for benchmarking
+        // Ignore any genproclimit setting to ensure full system is tested
+        int maxThreads = boost::thread::hardware_concurrency();
+        LogPrintf("Benchmark will test 1 to %d threads (all logical cores)\n", maxThreads);
 
         // Enable mining
         enableMining = true;
