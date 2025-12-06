@@ -1383,8 +1383,18 @@ static void promptForThreads(int screenHeight)
             // Restart mining with new thread count if currently mining
             bool currentlyMining = GetBoolArg("-gen", false);
             if (currentlyMining) {
+                // Stop mining first
+                GenerateBitcoins(false, 0, Params());
+                MilliSleep(500);  // Wait for threads to stop
+
+                // Reset counters and timer for accurate hashrate with new thread count
+                ehSolverRuns.value.store(0);
+                solutionTargetChecks.value.store(0);
+                miningTimer.zeroize();
+
+                // Restart mining with new thread count
                 GenerateBitcoins(true, threads, Params());
-                LogPrintf("User set mining threads to %d (mining restarted)\n", threads);
+                LogPrintf("User set mining threads to %d (mining restarted, counters reset)\n", threads);
             } else {
                 LogPrintf("User set mining threads to %d (will apply when mining starts)\n", threads);
             }
