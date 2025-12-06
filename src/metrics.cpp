@@ -560,17 +560,17 @@ static void drawLine(const std::string& title, const char* left, const char* rig
 }
 
 // Draw top border of box
-static void drawBoxTop(const std::string& title = "", int width = 78) {
+static void drawBoxTop(const std::string& title = "", int width = 74) {
     drawLine(title, BOX_TOP_LEFT, BOX_TOP_RIGHT, BOX_HORIZONTAL, width);
 }
 
 // Draw bottom border of box
-static void drawBoxBottom(int width = 78) {
+static void drawBoxBottom(int width = 74) {
     drawLine("", BOX_BOTTOM_LEFT, BOX_BOTTOM_RIGHT, BOX_HORIZONTAL, width);
 }
 
 // Draw a data row inside a box with label and value
-static void drawRow(const std::string& label, const std::string& value, int width = 78) {
+static void drawRow(const std::string& label, const std::string& value, int width = 74) {
     int labelLen = visibleLength(label);
     int valueLen = visibleLength(value);
     int padding = width - labelLen - valueLen - 2; // -2 for the two spaces (after | and before |)
@@ -581,7 +581,7 @@ static void drawRow(const std::string& label, const std::string& value, int widt
 }
 
 // Draw a centered text line in a box
-static void drawCentered(const std::string& text, const std::string& color = "", int width = 78) {
+static void drawCentered(const std::string& text, const std::string& color = "", int width = 74) {
     int textLen = visibleLength(text);
     int padding = (width - textLen) / 2;
     int rightPad = width - textLen - padding;
@@ -606,7 +606,7 @@ static void drawProgressBar(int percent, int width = 74) {
 }
 
 // Draw Network Difficulty row with inline meter bar showing position between historical min/max
-static void drawDifficultyRow(double currentDifficulty, int rowWidth = 78) {
+static void drawDifficultyRow(double currentDifficulty, int rowWidth = 74) {
     // Load difficulty history on first run (from file or blockchain)
     if (!difficultyHistoryInitialized.load()) {
         loadDifficultyHistory();
