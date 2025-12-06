@@ -159,6 +159,81 @@ static std::atomic<double> difficultyHistoricalHigh(0.0);
 static std::atomic<double> difficultyHistoricalLow(0.0);
 static std::atomic<bool> difficultyHistoryInitialized(false);
 
+// Load difficulty history from file, or calculate from blockchain if file doesn't exist
+static void loadDifficultyHistory()
+{
+    boost::filesystem::path historyFile = GetDataDir() / "difficulty_history.dat";
+
+    // Try to load from file first
+    if (boost::filesystem::exists(historyFile)) {
+        std::ifstream file(historyFile.string());
+        if (file.is_open()) {
+            double high, low;
+            if (file >> high >> low) {
+                difficultyHistoricalHigh = high;
+                difficultyHistoricalLow = low;
+                difficultyHistoryInitialized = true;
+                LogPrintf("Loaded difficulty history: high=%.6f, low=%.6f\n", high, low);
+                file.close();
+                return;
+            }
+            file.close();
+        }
+    }
+
+    // File doesn't exist or is invalid, calculate from blockchain
+    // Use last ~2 months of blocks (assuming ~1 min block time: 60*24*60 = 86400 blocks)
+    const int BLOCKS_TO_SCAN = 86400;
+
+    LOCK(cs_main);
+    if (!chainActive.Tip()) {
+        LogPrintf("Cannot initialize difficulty history: no chain tip\n");
+        return;
+    }
+
+    CBlockIndex* pindex = chainActive.Tip();
+    double high = 0.0;
+    double low = std::numeric_limits<double>::max();
+    int scanned = 0;
+
+    // Scan backwards through the chain
+    while (pindex && scanned < BLOCKS_TO_SCAN) {
+        double diff = GetDifficulty(pindex);
+        if (diff > high) high = diff;
+        if (diff < low) low = diff;
+        pindex = pindex->pprev;
+        scanned++;
+    }
+
+    if (scanned > 0) {
+        difficultyHistoricalHigh = high;
+        difficultyHistoricalLow = low;
+        difficultyHistoryInitialized = true;
+        LogPrintf("Initialized difficulty history from %d blocks: high=%.6f, low=%.6f\n",
+                  scanned, high, low);
+
+        // Save to file for future use
+        std::ofstream outFile(historyFile.string());
+        if (outFile.is_open()) {
+            outFile << std::fixed << std::setprecision(6) << high << " " << low;
+            outFile.close();
+        }
+    }
+}
+
+// Save difficulty history to file when updated
+static void saveDifficultyHistory()
+{
+    boost::filesystem::path historyFile = GetDataDir() / "difficulty_history.dat";
+    std::ofstream file(historyFile.string());
+    if (file.is_open()) {
+        double high = difficultyHistoricalHigh.load();
+        double low = difficultyHistoricalLow.load();
+        file << std::fixed << std::setprecision(6) << high << " " << low;
+        file.close();
+    }
+}
+
 // Store benchmark results
 struct BenchmarkResult {
     int threads;
@@ -532,21 +607,28 @@ static void drawProgressBar(int percent, int width = 74) {
 
 // Draw Network Difficulty row with inline meter bar showing position between historical min/max
 static void drawDifficultyRow(double currentDifficulty, int rowWidth = 78) {
-    // Initialize or update historical values
+    // Load difficulty history on first run (from file or blockchain)
     if (!difficultyHistoryInitialized.load()) {
-        difficultyHistoricalHigh = currentDifficulty;
-        difficultyHistoricalLow = currentDifficulty;
-        difficultyHistoryInitialized = true;
-    } else {
-        double currentHigh = difficultyHistoricalHigh.load();
-        double currentLow = difficultyHistoricalLow.load();
+        loadDifficultyHistory();
+    }
 
-        if (currentDifficulty > currentHigh) {
-            difficultyHistoricalHigh = currentDifficulty;
-        }
-        if (currentDifficulty < currentLow || currentLow == 0.0) {
-            difficultyHistoricalLow = currentDifficulty;
-        }
+    // Update historical values if we see new extremes
+    bool historyUpdated = false;
+    double currentHigh = difficultyHistoricalHigh.load();
+    double currentLow = difficultyHistoricalLow.load();
+
+    if (currentDifficulty > currentHigh) {
+        difficultyHistoricalHigh = currentDifficulty;
+        historyUpdated = true;
+    }
+    if (currentDifficulty < currentLow || currentLow == 0.0) {
+        difficultyHistoricalLow = currentDifficulty;
+        historyUpdated = true;
+    }
+
+    // Save to file if we updated the history
+    if (historyUpdated) {
+        saveDifficultyHistory();
     }
 
     // Calculate percentage for meter bar
@@ -904,8 +986,8 @@ int printMiningStatus(bool mining)
         std::string lightStatus = isLightMode ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
         std::string hugepagesStatus = hugepagesInUse ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
 
-        std::string controls2 = strprintf("\e[1;37m[F]\e[0m Fast Mode: %s  \e[1;37m[L]\e[0m Light Mode: %s  \e[1;37m[H]\e[0m Hugepages: %s",
-            fastStatus.c_str(), lightStatus.c_str(), hugepagesStatus.c_str());
+        std::string controls2 = strprintf("\e[1;37m[L]\e[0m Light Mode: %s  \e[1;37m[F]\e[0m Fast Mode: %s  \e[1;37m[H]\e[0m Hugepages: %s",
+            lightStatus.c_str(), fastStatus.c_str(), hugepagesStatus.c_str());
         drawCentered(controls2);
     } else {
         drawCentered("\e[1;37m[M]\e[0m Mining: \e[1;31mOFF\e[0m  \e[1;37m[Q]\e[0m Quit");
