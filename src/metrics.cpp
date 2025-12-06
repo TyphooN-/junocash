@@ -964,7 +964,7 @@ int printMiningStatus(bool mining)
             nThreads = GetArg("-genproclimit", 1);
         }
 
-        // Line 1: Mining status, threads, donations, benchmark, quit
+        // Line 1: Mining status, threads, donations, quit
         std::string controls1 = strprintf("\e[1;37m[M]\e[0m Mining: \e[1;32mON\e[0m  \e[1;37m[T]\e[0m Threads: %d", nThreads);
 
         int donationPct = getCurrentDonationPercentage();
@@ -974,11 +974,11 @@ int printMiningStatus(bool mining)
             controls1 += "  \e[1;37m[D]\e[0m Donations: \e[1;31mOFF\e[0m";
         }
 
-        controls1 += "  \e[1;37m[B]\e[0m Benchmark  \e[1;37m[Q]\e[0m Quit";
+        controls1 += "  \e[1;37m[Q]\e[0m Quit";
         drawCentered(controls1);
         lines++;
 
-        // Line 2: Mining mode toggles
+        // Line 2: Mining mode toggles and benchmark
         bool isFastMode = RandomX_IsFastMode();
         bool hugepagesInUse = RandomX_IsUsingHugepages();
         bool isLightMode = !isFastMode;
@@ -987,7 +987,7 @@ int printMiningStatus(bool mining)
         std::string lightStatus = isLightMode ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
         std::string hugepagesStatus = hugepagesInUse ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
 
-        std::string controls2 = strprintf("\e[1;37m[L]\e[0m Light Mode: %s  \e[1;37m[F]\e[0m Fast Mode: %s  \e[1;37m[H]\e[0m Hugepages: %s",
+        std::string controls2 = strprintf("\e[1;37m[L]\e[0m Light Mode: %s  \e[1;37m[F]\e[0m Fast Mode: %s  \e[1;37m[H]\e[0m Hugepages: %s  \e[1;37m[B]\e[0m Benchmark",
             lightStatus.c_str(), fastStatus.c_str(), hugepagesStatus.c_str());
         drawCentered(controls2);
     } else {
