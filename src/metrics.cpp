@@ -142,6 +142,7 @@ std::atomic<bool> benchmarkTestLight(true);
 std::atomic<bool> benchmarkTestFast(true);
 std::atomic<bool> benchmarkTestHugepages(true);
 static std::atomic<int64_t> benchmarkStartTime(0);
+static std::atomic<int> benchmarkStartHeight(0);  // Track starting block height for benchmark duration logging
 static std::atomic<double> benchmarkAccumulatedHashrate(0.0);
 static std::atomic<int> benchmarkSampleCount(0);
 static std::atomic<bool> benchmarkWarmingUp(false);  // Track if currently in warmup phase
@@ -1691,6 +1692,16 @@ void ThreadBenchmarkMining()
     }
 
     LogPrintf("Benchmark results will be saved to: %s\n", benchmarkLogPath.string());
+
+    // Capture starting block height for benchmark duration tracking
+    {
+        LOCK(cs_main);
+        if (chainActive.Tip()) {
+            benchmarkStartHeight = chainActive.Tip()->nHeight;
+        } else {
+            benchmarkStartHeight = 0;
+        }
+    }
 
     // Get mining mode information
     bool fastMode = GetBoolArg("-randomxfastmode", false);
