@@ -14,8 +14,9 @@
 #include <vector>
 #include <atomic>
 
-// Global fast mode flag
+// Global fast mode and hugepages flags
 static bool rx_fast_mode = false;
+static bool rx_use_hugepages = false;
 static std::atomic<bool> rx_initialized{false};
 
 // Multi-cache system to support concurrent access to multiple seeds
@@ -106,13 +107,26 @@ static std::shared_ptr<CacheEntry> GetOrCreateCache(const uint256& seedhash)
     }
 
     // Create new cache
-    LogPrintf("RandomX: Creating new cache for seed %s\n", seedhash.GetHex());
+    LogPrintf("RandomX: Creating new cache for seed %s%s\n",
+              seedhash.GetHex(),
+              rx_use_hugepages ? " (with hugepages)" : "");
 
     randomx_flags flags = randomx_get_flags();
     flags |= RANDOMX_FLAG_JIT;
 
+    if (rx_use_hugepages) {
+        flags |= RANDOMX_FLAG_LARGE_PAGES;
+    }
+
     auto entry = std::make_shared<CacheEntry>();
     entry->cache = randomx_alloc_cache(flags);
+    if (!entry->cache && rx_use_hugepages) {
+        // Hugepages allocation failed, try without
+        LogPrintf("RandomX: WARNING - Failed to allocate cache with hugepages, retrying with normal memory\n");
+        flags = static_cast<randomx_flags>(static_cast<int>(flags) & ~static_cast<int>(RANDOMX_FLAG_LARGE_PAGES));
+        entry->cache = randomx_alloc_cache(flags);
+    }
+
     if (!entry->cache) {
         LogPrintf("RandomX: ERROR - Failed to allocate cache\n");
         return nullptr;
@@ -184,13 +198,26 @@ static std::shared_ptr<DatasetEntry> GetOrCreateDataset(const uint256& seedhash,
     }
 
     // Create new dataset
-    LogPrintf("RandomX: Creating new dataset for seed %s (this takes ~30 seconds)...\n", seedhash.GetHex());
+    LogPrintf("RandomX: Creating new dataset for seed %s (this takes ~30 seconds)%s...\n",
+              seedhash.GetHex(),
+              rx_use_hugepages ? " (with hugepages)" : "");
 
     randomx_flags flags = randomx_get_flags();
     flags |= RANDOMX_FLAG_JIT;
 
+    if (rx_use_hugepages) {
+        flags |= RANDOMX_FLAG_LARGE_PAGES;
+    }
+
     auto entry = std::make_shared<DatasetEntry>();
     entry->dataset = randomx_alloc_dataset(flags);
+    if (!entry->dataset && rx_use_hugepages) {
+        // Hugepages allocation failed, try without
+        LogPrintf("RandomX: WARNING - Failed to allocate dataset with hugepages, retrying with normal memory\n");
+        flags = static_cast<randomx_flags>(static_cast<int>(flags) & ~static_cast<int>(RANDOMX_FLAG_LARGE_PAGES));
+        entry->dataset = randomx_alloc_dataset(flags);
+    }
+
     if (!entry->dataset) {
         LogPrintf("RandomX: ERROR - Failed to allocate dataset (need ~2GB RAM)\n");
         return nullptr;
@@ -235,15 +262,50 @@ bool RandomX_IsFastMode()
     return rx_fast_mode;
 }
 
+// Change mode at runtime without full shutdown/reinit
+void RandomX_ChangeMode(bool fastMode, bool useHugePages)
+{
+    LogPrintf("RandomX: Changing mode to %s%s\n",
+              fastMode ? "FAST (2GB dataset)" : "light (256MB cache)",
+              useHugePages ? " with hugepages" : "");
+
+    // Update global flags
+    // Mining threads will automatically detect the mode change and recreate their VMs
+    // (see RandomX_Hash_WithSeed lines 394-406 for VM mode mismatch detection)
+    rx_fast_mode = fastMode;
+    rx_use_hugepages = useHugePages;
+
+    // Pre-create cache/dataset for current main seed with new settings
+    uint256 seed;
+    {
+        std::lock_guard<std::mutex> lock(main_seed_mutex);
+        if (!main_seed_set) {
+            LogPrintf("RandomX: WARNING - No main seed set, skipping pre-cache\n");
+            return;
+        }
+        seed = main_seed;
+    }
+
+    auto cache = GetOrCreateCache(seed);
+    if (fastMode && cache) {
+        GetOrCreateDataset(seed, cache);
+    }
+
+    LogPrintf("RandomX: Mode change complete\n");
+}
+
 // Initialize RandomX
-void RandomX_Init(bool fastMode)
+void RandomX_Init(bool fastMode, bool useHugePages)
 {
     if (rx_initialized.exchange(true)) {
         return;  // Already initialized
     }
 
     rx_fast_mode = fastMode;
-    LogPrintf("RandomX: Initializing %s mode\n", fastMode ? "FAST (2GB dataset)" : "light (256MB cache)");
+    rx_use_hugepages = useHugePages;
+    LogPrintf("RandomX: Initializing %s mode%s\n",
+              fastMode ? "FAST (2GB dataset)" : "light (256MB cache)",
+              useHugePages ? " with hugepages" : "");
 
     // Set genesis seed as default main seed
     uint256 genesisSeed;
@@ -379,12 +441,24 @@ bool RandomX_Hash_WithSeed(const void* seedhash, size_t seedhashSize,
         randomx_flags flags = randomx_get_flags();
         flags |= RANDOMX_FLAG_JIT;
 
+        if (rx_use_hugepages) {
+            flags |= RANDOMX_FLAG_LARGE_PAGES;
+        }
+
         randomx_vm* vm = nullptr;
+        bool tried_hugepages = false;
 
         if (use_fast) {
             // Fast mode: use dataset
             flags |= RANDOMX_FLAG_FULL_MEM;
             vm = randomx_create_vm(flags, nullptr, dataset_entry->dataset);
+            if (!vm && rx_use_hugepages) {
+                // Try without hugepages
+                tried_hugepages = true;
+                LogPrintf("RandomX: WARNING - Failed to create fast VM with hugepages, trying without\n");
+                flags = static_cast<randomx_flags>(static_cast<int>(flags) & ~static_cast<int>(RANDOMX_FLAG_LARGE_PAGES));
+                vm = randomx_create_vm(flags, nullptr, dataset_entry->dataset);
+            }
             if (!vm) {
                 LogPrintf("RandomX: WARNING - Failed to create fast VM, trying light mode\n");
                 use_fast = false;
@@ -394,7 +468,16 @@ bool RandomX_Hash_WithSeed(const void* seedhash, size_t seedhashSize,
         if (!vm) {
             // Light mode: use cache
             flags = static_cast<randomx_flags>(static_cast<int>(flags) & ~static_cast<int>(RANDOMX_FLAG_FULL_MEM));
+            if (rx_use_hugepages && !tried_hugepages) {
+                flags |= RANDOMX_FLAG_LARGE_PAGES;
+            }
             vm = randomx_create_vm(flags, cache_entry->cache, nullptr);
+            if (!vm && rx_use_hugepages) {
+                // Try without hugepages
+                LogPrintf("RandomX: WARNING - Failed to create VM with hugepages, trying without\n");
+                flags = static_cast<randomx_flags>(static_cast<int>(flags) & ~static_cast<int>(RANDOMX_FLAG_LARGE_PAGES));
+                vm = randomx_create_vm(flags, cache_entry->cache, nullptr);
+            }
         }
 
         if (!vm) {
