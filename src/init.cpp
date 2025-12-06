@@ -503,6 +503,8 @@ std::string HelpMessage(HelpMessageMode mode)
     strUsage += HelpMessageOpt("-equihashsolver=<name>", _("Specify the Equihash solver to be used if enabled (default: \"default\")"));
     strUsage += HelpMessageOpt("-mineraddress=<addr>", _("(NOT NECESSARY) Send mined coins to a specific transparent P2PKH address (t...). A new address is generated per block if not set. Use t_getminingaddress RPC to get an address."));
     strUsage += HelpMessageOpt("-randomxfastmode", _("Use RandomX fast mode with 2GB dataset for ~2x mining speed (default: 0)"));
+    strUsage += HelpMessageOpt("-randomxhugepages", _("Use hugepages (1GB/2MB) for RandomX memory allocation for 5-10% extra performance. Requires system hugepages configured (default: 0)"));
+    strUsage += HelpMessageOpt("-benchmark", _("Automatically benchmark mining performance with different thread counts and save results to benchmark.log (default: 0)"));
     strUsage += HelpMessageOpt("-minetolocalwallet", strprintf(
             _("Require that mined blocks use a coinbase address in the local wallet (default: %u)"),
  #ifdef ENABLE_WALLET
@@ -1806,7 +1808,8 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 // Juno Cash: Initialize RandomX before loading block index
                 // This is required for PoW validation during LoadBlockIndex
                 bool randomxFastMode = GetBoolArg("-randomxfastmode", false);
-                RandomX_Init(randomxFastMode);
+                bool randomxHugePages = GetBoolArg("-randomxhugepages", false);
+                RandomX_Init(randomxFastMode, randomxHugePages);
 
                 if (!LoadBlockIndex()) {
                     strLoadError = _("Error loading block database");
@@ -2123,7 +2126,35 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 
 #ifdef ENABLE_MINING
     // Generate coins in the background
-    GenerateBitcoins(GetBoolArg("-gen", DEFAULT_GENERATE), GetArg("-genproclimit", DEFAULT_GENERATE_THREADS), chainparams);
+    bool enableMining = GetBoolArg("-gen", DEFAULT_GENERATE);
+    bool benchmarkMode = GetBoolArg("-benchmark", false);
+
+    if (benchmarkMode) {
+        // Benchmark mode: automatically test different thread counts
+        LogPrintf("Benchmark mode enabled\n");
+
+        // Determine max threads - use all logical threads (including hyperthreading)
+        int maxThreads = GetArg("-genproclimit", DEFAULT_GENERATE_THREADS);
+        if (maxThreads == -1 || maxThreads == 0) {
+            maxThreads = boost::thread::hardware_concurrency();
+        }
+
+        // Enable mining
+        enableMining = true;
+
+        // Start benchmark thread (will be defined in metrics.cpp)
+        extern std::atomic<bool> benchmarkMode;
+        extern std::atomic<int> benchmarkMaxThreads;
+        benchmarkMode = true;
+        benchmarkMaxThreads = maxThreads;
+
+        threadGroup.create_thread(
+            boost::bind(&TraceThread<void (*)()>, "benchmark", &ThreadBenchmarkMining)
+        );
+    } else {
+        // Normal mining mode (not benchmark)
+        GenerateBitcoins(enableMining, GetArg("-genproclimit", DEFAULT_GENERATE_THREADS), chainparams);
+    }
 #endif
 
     // ********************************************************* Step 12: finished
