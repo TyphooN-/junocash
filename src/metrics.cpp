@@ -1016,11 +1016,6 @@ int printMetrics(size_t cols, bool mining)
     std::string strDuration = strprintf(_("Uptime: %s"), duration);
     std::cout << strDuration << std::endl;
     lines += (strDuration.size() / cols);
-
-    if (mining && loaded) {
-        std::cout << "- " << strprintf(_("You have completed %d RandomX hashes."), ehSolverRuns.get()) << std::endl;
-        lines++;
-    }
     std::cout << std::endl;
 
     return lines;
