@@ -99,7 +99,7 @@ OPTIONS:
     --linux-debug           Build Linux with debug symbols
     -m, --macos-intel       Build for macOS Intel (x86_64-apple-darwin)
     -a, --macos-arm         Build for macOS Apple Silicon (aarch64-apple-darwin)
-    -A, --all               Build for all platforms (default if no platform specified)
+    -A, --all               Build Linux, Windows, macOS ARM (excludes Intel Mac)
     --all-debug             Build for all platforms with debug symbols
     -g, --gitian            Use Gitian for reproducible Linux builds (glibc 2.31)
     -t, --tag REF           Git tag/branch/commit to build (default: HEAD, for --gitian)
@@ -210,10 +210,11 @@ parse_args() {
     done
 
     # If --all or --all-debug is specified or no specific platform, build all
+    # Note: macOS Intel is NOT included in --all since Intel Macs are rare now
+    # Use --macos-intel explicitly if needed
     if [ "$BUILD_ALL" = true ] || [ "$BUILD_ALL_DEBUG" = true ]; then
         BUILD_WINDOWS=true
         BUILD_LINUX=true
-        BUILD_MACOS_INTEL=true
         BUILD_MACOS_ARM=true
         if [ "$BUILD_ALL_DEBUG" = true ]; then
             BUILD_LINUX_DEBUG=true
