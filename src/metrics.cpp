@@ -1796,9 +1796,6 @@ void ThreadBenchmarkMining()
             for (int threadCount = 1; threadCount <= benchmarkMaxThreads.load(); threadCount++) {
                 benchmarkCurrentThreads = threadCount;
 
-                // Set the thread count and restart mining
-                mapArgs["-genproclimit"] = std::to_string(threadCount);
-
                 LogPrintf("Benchmark: Testing %s mode with %d thread(s)...\n", mode.name, threadCount);
                 benchmarkLog << "\n  Thread Count: " << threadCount << "\n";
                 benchmarkLog << std::flush;
