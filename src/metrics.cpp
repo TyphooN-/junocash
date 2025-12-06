@@ -154,6 +154,11 @@ static std::atomic<bool> benchmarkAutoApply(false); // Auto-apply optimal thread
 static std::atomic<int64_t> miningStartTime(0);  // Track when mining started for warmup detection
 static const int MINING_WARMUP_SECONDS = 10;  // Show warmup status for first 10 seconds
 
+// Historical difficulty tracking for meter visualization
+static std::atomic<double> difficultyHistoricalHigh(0.0);
+static std::atomic<double> difficultyHistoricalLow(0.0);
+static std::atomic<bool> difficultyHistoryInitialized(false);
+
 // Store benchmark results
 struct BenchmarkResult {
     int threads;
@@ -525,6 +530,62 @@ static void drawProgressBar(int percent, int width = 74) {
     std::cout << "\e[0m " << BOX_VERTICAL << std::endl;
 }
 
+// Update historical difficulty high/low and draw difficulty meter bar
+static void drawDifficultyMeter(double currentDifficulty, int width = 74) {
+    // Initialize or update historical values
+    if (!difficultyHistoryInitialized.load()) {
+        difficultyHistoricalHigh = currentDifficulty;
+        difficultyHistoricalLow = currentDifficulty;
+        difficultyHistoryInitialized = true;
+    } else {
+        double currentHigh = difficultyHistoricalHigh.load();
+        double currentLow = difficultyHistoricalLow.load();
+
+        if (currentDifficulty > currentHigh) {
+            difficultyHistoricalHigh = currentDifficulty;
+        }
+        if (currentDifficulty < currentLow || currentLow == 0.0) {
+            difficultyHistoricalLow = currentDifficulty;
+        }
+    }
+
+    // Calculate percentage for meter bar
+    double high = difficultyHistoricalHigh.load();
+    double low = difficultyHistoricalLow.load();
+    int percent = 50;  // Default to middle if no range
+
+    if (high > low) {
+        double range = high - low;
+        double position = currentDifficulty - low;
+        percent = static_cast<int>((position / range) * 100);
+        if (percent < 0) percent = 0;
+        if (percent > 100) percent = 100;
+    }
+
+    // Draw the meter bar with color coding based on difficulty level
+    // Green (low): 0-33%, Orange (average): 34-66%, Red (high): 67-100%
+    int filled = (percent * width) / 100;
+    const char* filledColor;
+    const char* emptyColor;
+
+    if (percent <= 33) {
+        filledColor = "\e[1;32m";  // Bright green for low difficulty
+        emptyColor = "\e[0;32m";   // Dim green
+    } else if (percent <= 66) {
+        filledColor = "\e[1;33m";  // Bright orange for average difficulty
+        emptyColor = "\e[0;33m";   // Dim orange
+    } else {
+        filledColor = "\e[1;31m";  // Bright red for high difficulty
+        emptyColor = "\e[0;31m";   // Dim red
+    }
+
+    std::cout << BOX_VERTICAL << " " << filledColor;
+    for (int i = 0; i < filled; i++) std::cout << BOX_PROGRESS_FILLED;
+    std::cout << emptyColor;
+    for (int i = filled; i < width; i++) std::cout << BOX_PROGRESS_EMPTY;
+    std::cout << "\e[0m " << BOX_VERTICAL << std::endl;
+}
+
 int printStats(MetricsStats stats, bool isScreen, bool mining)
 {
     int lines = 0;
@@ -580,6 +641,12 @@ int printStats(MetricsStats stats, bool isScreen, bool mining)
     double difficulty = GetNetworkDifficulty(chainActive.Tip());
     drawRow("Network Difficulty", strprintf("%.6f", difficulty));
     lines++;
+
+    // Add difficulty meter bar showing historical context
+    if (isScreen) {
+        drawDifficultyMeter(difficulty);
+        lines++;
+    }
 
     // Network info
     auto secondsLeft = SecondsLeftToNextEpoch(params, stats.height);
