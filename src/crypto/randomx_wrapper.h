@@ -102,14 +102,27 @@ bool RandomX_Verify(const void* input, size_t inputSize, const uint256& expected
  *
  * @param fastMode If true, use full 2GB dataset for ~2x faster mining.
  *                 If false (default), use 256MB cache (light mode).
+ * @param useHugePages If true, allocate memory using large pages (1GB/2MB hugepages)
+ *                     for 5-10% additional performance. Requires system hugepages configured.
+ *                     Falls back to normal memory if allocation fails.
  */
-void RandomX_Init(bool fastMode = false);
+void RandomX_Init(bool fastMode = false, bool useHugePages = false);
 
 /**
  * Check if RandomX is running in fast mode.
  * @return true if using full dataset, false if using light mode.
  */
 bool RandomX_IsFastMode();
+
+/**
+ * Change RandomX mode at runtime without full shutdown/reinit.
+ * This is safe to call while mining - threads will automatically
+ * recreate their VMs with the new mode settings.
+ *
+ * @param fastMode If true, use full 2GB dataset. If false, use 256MB cache.
+ * @param useHugePages If true, use hugepages for memory allocation.
+ */
+void RandomX_ChangeMode(bool fastMode, bool useHugePages);
 
 /**
  * Cleanup RandomX (call at shutdown).
