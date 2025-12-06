@@ -877,19 +877,32 @@ int printMiningStatus(bool mining)
             nThreads = GetArg("-genproclimit", 1);
         }
 
-        std::string controls = strprintf("\e[1;37m[M]\e[0m Mining: \e[1;32mON\e[0m  \e[1;37m[T]\e[0m Threads: %d", nThreads);
+        // Line 1: Mining status, threads, donations, benchmark, quit
+        std::string controls1 = strprintf("\e[1;37m[M]\e[0m Mining: \e[1;32mON\e[0m  \e[1;37m[T]\e[0m Threads: %d", nThreads);
 
         int donationPct = getCurrentDonationPercentage();
         if (donationPct > 0) {
-            // Donations are ON, show current state and controls
-            controls += strprintf("  \e[1;37m[D]\e[0m Donations: \e[1;35mON (%d%%)\e[0m  \e[1;37m[P]\e[0m Change %%", donationPct);
+            controls1 += strprintf("  \e[1;37m[D]\e[0m Donations: \e[1;35mON (%d%%)\e[0m  \e[1;37m[P]\e[0m Change %%", donationPct);
         } else {
-            // Donations are OFF, show current state
-            controls += "  \e[1;37m[D]\e[0m Donations: \e[1;31mOFF\e[0m";
+            controls1 += "  \e[1;37m[D]\e[0m Donations: \e[1;31mOFF\e[0m";
         }
 
-        controls += "  \e[1;37m[B]\e[0m Benchmark  \e[1;37m[Q]\e[0m Quit";
-        drawCentered(controls);
+        controls1 += "  \e[1;37m[B]\e[0m Benchmark  \e[1;37m[Q]\e[0m Quit";
+        drawCentered(controls1);
+        lines++;
+
+        // Line 2: Mining mode toggles
+        bool isFastMode = RandomX_IsFastMode();
+        bool hugepagesInUse = RandomX_IsUsingHugepages();
+        bool isLightMode = !isFastMode;
+
+        std::string fastStatus = isFastMode ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
+        std::string lightStatus = isLightMode ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
+        std::string hugepagesStatus = hugepagesInUse ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
+
+        std::string controls2 = strprintf("\e[1;37m[F]\e[0m Fast Mode: %s  \e[1;37m[L]\e[0m Light Mode: %s  \e[1;37m[H]\e[0m Hugepages: %s",
+            fastStatus.c_str(), lightStatus.c_str(), hugepagesStatus.c_str());
+        drawCentered(controls2);
     } else {
         drawCentered("\e[1;37m[M]\e[0m Mining: \e[1;31mOFF\e[0m  \e[1;37m[Q]\e[0m Quit");
     }
@@ -1176,6 +1189,129 @@ static void toggleMining()
         miningStartTime = 0;  // Clear start time when mining stops
         LogPrintf("User disabled mining\n");
     }
+}
+
+// Toggle Fast Mode on/off (turns off Light Mode)
+static void toggleFastMode()
+{
+    bool currentlyMining = GetBoolArg("-gen", false);
+    bool isFastMode = RandomX_IsFastMode();
+    bool hugepagesInUse = RandomX_IsUsingHugepages();
+
+    if (!currentlyMining) return;  // Only allow when mining
+
+    if (isFastMode) {
+        // Switching to Light Mode
+        LogPrintf("User switching to Light Mode\n");
+
+        // Stop mining
+        GenerateBitcoins(false, 0, Params());
+        MilliSleep(500);
+
+        // Change mode
+        RandomX_ChangeMode(false, false);
+
+        // Reset counters and timer
+        ehSolverRuns.value.store(0);
+        solutionTargetChecks.value.store(0);
+        miningTimer.zeroize();
+
+        // Restart mining
+        int nThreads = GetArg("-genproclimit", 1);
+        GenerateBitcoins(true, nThreads, Params());
+        miningStartTime = GetTime();
+    } else {
+        // Switching to Fast Mode
+        LogPrintf("User switching to Fast Mode\n");
+
+        // Stop mining
+        GenerateBitcoins(false, 0, Params());
+        MilliSleep(500);
+
+        // Change mode (preserve hugepages setting)
+        RandomX_ChangeMode(true, hugepagesInUse);
+
+        // Reset counters and timer
+        ehSolverRuns.value.store(0);
+        solutionTargetChecks.value.store(0);
+        miningTimer.zeroize();
+
+        // Restart mining
+        int nThreads = GetArg("-genproclimit", 1);
+        GenerateBitcoins(true, nThreads, Params());
+        miningStartTime = GetTime();
+    }
+}
+
+// Toggle Light Mode on/off (turns off Fast Mode)
+static void toggleLightMode()
+{
+    bool currentlyMining = GetBoolArg("-gen", false);
+    bool isFastMode = RandomX_IsFastMode();
+
+    if (!currentlyMining) return;  // Only allow when mining
+
+    if (!isFastMode) {
+        // Already in Light Mode, do nothing
+        return;
+    } else {
+        // Switching to Light Mode
+        LogPrintf("User switching to Light Mode\n");
+
+        // Stop mining
+        GenerateBitcoins(false, 0, Params());
+        MilliSleep(500);
+
+        // Change mode
+        RandomX_ChangeMode(false, false);
+
+        // Reset counters and timer
+        ehSolverRuns.value.store(0);
+        solutionTargetChecks.value.store(0);
+        miningTimer.zeroize();
+
+        // Restart mining
+        int nThreads = GetArg("-genproclimit", 1);
+        GenerateBitcoins(true, nThreads, Params());
+        miningStartTime = GetTime();
+    }
+}
+
+// Toggle Hugepages on/off (only works in Fast Mode)
+static void toggleHugepages()
+{
+    bool currentlyMining = GetBoolArg("-gen", false);
+    bool isFastMode = RandomX_IsFastMode();
+    bool hugepagesInUse = RandomX_IsUsingHugepages();
+
+    if (!currentlyMining) return;  // Only allow when mining
+
+    if (!isFastMode) {
+        // Hugepages only available in Fast Mode
+        LogPrintf("Hugepages only available in Fast Mode\n");
+        return;
+    }
+
+    LogPrintf("User toggling Hugepages: %s -> %s\n",
+        hugepagesInUse ? "ON" : "OFF",
+        !hugepagesInUse ? "ON" : "OFF");
+
+    // Stop mining
+    GenerateBitcoins(false, 0, Params());
+    MilliSleep(500);
+
+    // Change mode with toggled hugepages
+    RandomX_ChangeMode(true, !hugepagesInUse);
+
+    // Reset counters and timer
+    ehSolverRuns.value.store(0);
+    solutionTargetChecks.value.store(0);
+    miningTimer.zeroize();
+
+    // Restart mining
+    int nThreads = GetArg("-genproclimit", 1);
+    GenerateBitcoins(true, nThreads, Params());
+    miningStartTime = GetTime();
 }
 
 // Store original thread count before benchmark
@@ -2370,8 +2506,17 @@ void ThreadShowMetricsScreen()
                         break;  // Force screen refresh
                     }
                 } else if (mining) {
-                    // Donation controls only available when mining
-                    if (key == 'D' || key == 'd') {
+                    // Mining mode controls only available when mining
+                    if (key == 'F' || key == 'f') {
+                        toggleFastMode();
+                        break;  // Force screen refresh
+                    } else if (key == 'L' || key == 'l') {
+                        toggleLightMode();
+                        break;  // Force screen refresh
+                    } else if (key == 'H' || key == 'h') {
+                        toggleHugepages();
+                        break;  // Force screen refresh
+                    } else if (key == 'D' || key == 'd') {
                         toggleDonation();
                         break;  // Force screen refresh
                     } else if (key == 'P' || key == 'p') {
