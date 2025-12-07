@@ -75,6 +75,7 @@ extern std::atomic<size_t> nSizeReindexed; // valid only during reindex
 extern std::atomic<size_t> nFullSizeToReindex; // valid only during reindex
 
 void TrackMinedBlock(uint256 hash);
+void RecordBlockFound(int64_t timeMining, double difficulty, double hashrate);
 
 void MarkStartTime();
 double GetLocalSolPS();

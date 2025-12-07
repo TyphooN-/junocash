@@ -154,6 +154,11 @@ static std::atomic<bool> benchmarkAutoApply(false); // Auto-apply optimal thread
 static std::atomic<int64_t> miningStartTime(0);  // Track when mining started for warmup detection
 static const int MINING_WARMUP_SECONDS = 10;  // Show warmup status for first 10 seconds
 
+// Mining probability and luck tracking
+static std::atomic<int64_t> lastBlockFoundTime(0);  // Timestamp when last block was found
+static std::atomic<int> lastBlockFoundHeight(0);    // Height of last block we found
+static std::atomic<double> lastBlockLuckPercent(0.0);  // Luck % for last found block
+
 // Historical difficulty tracking for meter visualization
 static std::atomic<double> difficultyHistoricalHigh(0.0);
 static std::atomic<double> difficultyHistoricalLow(0.0);
@@ -231,6 +236,37 @@ static void saveDifficultyHistory()
         double low = difficultyHistoricalLow.load();
         file << std::fixed << std::setprecision(6) << high << " " << low;
         file.close();
+    }
+}
+
+// Calculate expected time to find a block (in seconds) based on hashrate and difficulty
+static double calculateExpectedBlockTime(double hashrate, double difficulty)
+{
+    if (hashrate <= 0 || difficulty <= 0) return 0;
+
+    // difficulty * 2^256 / hashrate = expected hashes
+    // For RandomX, difficulty represents the target threshold
+    // Expected time = (2^256 / target) / hashrate
+    // Since difficulty = 2^256 / target, expected time = difficulty / hashrate
+    return difficulty / hashrate;
+}
+
+// Record when a block is found for luck calculation
+void RecordBlockFound(int64_t timeMining, double difficulty, double hashrate)
+{
+    lastBlockFoundTime = GetTime();
+    lastBlockFoundHeight = chainActive.Height();
+
+    // Calculate luck percentage
+    // Luck = expected time / actual time * 100
+    if (timeMining > 0 && difficulty > 0 && hashrate > 0) {
+        double expectedTime = calculateExpectedBlockTime(hashrate, difficulty);
+        double luckPercent = (expectedTime / timeMining) * 100.0;
+        lastBlockLuckPercent = luckPercent;
+        LogPrintf("Block found! Luck: %.1f%% (expected %s, actual %s)\n",
+                  luckPercent,
+                  DisplayDuration(expectedTime, DurationFormat::REDUCED).c_str(),
+                  DisplayDuration(timeMining, DurationFormat::REDUCED).c_str());
     }
 }
 
@@ -890,6 +926,57 @@ int printMiningStatus(bool mining)
 
             drawRow("Mining Mode", miningMode);
             lines++;
+
+            // Show mining probability and expected time to find block
+            double currentHashrate = GetLocalSolPS();
+            double difficulty = GetNetworkDifficulty(chainActive.Tip());
+
+            if (currentHashrate > 0 && difficulty > 0 && !benchmarkMode.load()) {
+                double expectedTime = calculateExpectedBlockTime(currentHashrate, difficulty);
+                std::string expectedTimeStr = DisplayDuration(expectedTime, DurationFormat::REDUCED);
+
+                // Calculate time since mining started or last block found
+                int64_t timeMining = 0;
+                int64_t lastFound = lastBlockFoundTime.load();
+                int64_t miningStart = miningStartTime.load();
+
+                if (lastFound > 0 && lastFound > miningStart) {
+                    timeMining = GetTime() - lastFound;
+                } else if (miningStart > 0) {
+                    timeMining = GetTime() - miningStart;
+                }
+
+                // Show expected time
+                drawRow("Expected Time", expectedTimeStr);
+                lines++;
+
+                // Show luck for last block found (if any this session)
+                if (lastBlockFoundTime.load() > 0 && lastBlockLuckPercent.load() > 0) {
+                    double luck = lastBlockLuckPercent.load();
+                    std::string luckColor;
+                    if (luck >= 100) {
+                        luckColor = "\e[1;32m";  // Green for lucky (less time than expected)
+                    } else if (luck >= 50) {
+                        luckColor = "\e[1;33m";  // Orange for average
+                    } else {
+                        luckColor = "\e[1;31m";  // Red for unlucky (more time than expected)
+                    }
+                    drawRow("Last Block Luck", strprintf("%s%.1f%%\e[0m", luckColor.c_str(), luck));
+                    lines++;
+                }
+
+                // Show progress toward finding next block
+                if (timeMining > 0) {
+                    double progressPercent = (timeMining / expectedTime) * 100.0;
+                    if (progressPercent > 999) progressPercent = 999;  // Cap display at 999%
+
+                    std::string progressStr = strprintf("%.1f%% (%s elapsed)",
+                        progressPercent,
+                        DisplayDuration(timeMining, DurationFormat::REDUCED).c_str());
+                    drawRow("Progress", progressStr);
+                    lines++;
+                }
+            }
 
             // Show benchmark status if active
             if (benchmarkMode.load()) {
