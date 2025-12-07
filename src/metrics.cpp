@@ -164,6 +164,9 @@ static std::atomic<double> difficultyHistoricalHigh(0.0);
 static std::atomic<double> difficultyHistoricalLow(0.0);
 static std::atomic<bool> difficultyHistoryInitialized(false);
 
+// External function declarations
+extern int64_t GetNetworkHashPS(int lookup, int height);
+
 // Load difficulty history from file, or calculate from blockchain if file doesn't exist
 static void loadDifficultyHistory()
 {
@@ -239,16 +242,22 @@ static void saveDifficultyHistory()
     }
 }
 
-// Calculate expected time to find a block (in seconds) based on hashrate and difficulty
-static double calculateExpectedBlockTime(double hashrate, double difficulty)
+// Calculate expected time to find a block (in seconds) based on solo hashrate
+static double calculateExpectedBlockTime(double soloHashrate)
 {
-    if (hashrate <= 0 || difficulty <= 0) return 0;
+    if (soloHashrate <= 0) return 0;
 
-    // difficulty * 2^256 / hashrate = expected hashes
-    // For RandomX, difficulty represents the target threshold
-    // Expected time = (2^256 / target) / hashrate
-    // Since difficulty = 2^256 / target, expected time = difficulty / hashrate
-    return difficulty / hashrate;
+    // Get network hashrate (average over last 120 blocks)
+    int64_t networkHashrate = GetNetworkHashPS(120, -1);
+    if (networkHashrate <= 0) return 0;
+
+    // Expected time = (Network Hashrate / Solo Hashrate) × Target Block Time
+    // Use POST_BLOSSOM_POW_TARGET_SPACING (60 seconds after Blossom activation)
+    const Consensus::Params& params = Params().GetConsensus();
+    double targetBlockTime = static_cast<double>(params.nPostBlossomPowTargetSpacing);
+
+    double expectedTime = (static_cast<double>(networkHashrate) / soloHashrate) * targetBlockTime;
+    return expectedTime;
 }
 
 // Record when a block is found for luck calculation
@@ -259,8 +268,8 @@ void RecordBlockFound(int64_t timeMining, double difficulty, double hashrate)
 
     // Calculate luck percentage
     // Luck = expected time / actual time * 100
-    if (timeMining > 0 && difficulty > 0 && hashrate > 0) {
-        double expectedTime = calculateExpectedBlockTime(hashrate, difficulty);
+    if (timeMining > 0 && hashrate > 0) {
+        double expectedTime = calculateExpectedBlockTime(hashrate);
         double luckPercent = (expectedTime / timeMining) * 100.0;
         lastBlockLuckPercent = luckPercent;
         LogPrintf("Block found! Luck: %.1f%% (expected %s, actual %s)\n",
@@ -278,8 +287,6 @@ struct BenchmarkResult {
     int samples;
 };
 static std::vector<BenchmarkResult> benchmarkResults;
-
-extern int64_t GetNetworkHashPS(int lookup, int height);
 
 void TrackMinedBlock(uint256 hash)
 {
@@ -641,6 +648,36 @@ static void drawProgressBar(int percent, int width = 74) {
     std::cout << "\e[0m " << BOX_VERTICAL << std::endl;
 }
 
+// Draw Progress row with inline progress bar
+static void drawProgressRow(double progressPercent, int64_t timeMining, int rowWidth = 74) {
+    // Format the progress value with elapsed time
+    std::string valueStr = strprintf("%.1f%% (%s)",
+        progressPercent,
+        DisplayDuration(timeMining, DurationFormat::REDUCED).c_str());
+    std::string label = "Progress";
+
+    // Calculate available space for progress bar: total width - label - value - padding
+    int labelLen = visibleLength(label);
+    int valueLen = visibleLength(valueStr);
+    // -2 for box borders, -2 for spaces after label, -2 for spaces before value = -6 total
+    int barWidth = rowWidth - labelLen - valueLen - 6;
+    if (barWidth < 10) barWidth = 10;  // Minimum bar width
+
+    // Calculate filled portion of bar (cap at 100% for visual display)
+    int displayPercent = static_cast<int>(progressPercent);
+    if (displayPercent > 100) displayPercent = 100;
+    if (displayPercent < 0) displayPercent = 0;
+
+    int filled = (displayPercent * barWidth) / 100;
+
+    // Draw the row: | Label  [filled progress bar]  value |
+    std::cout << BOX_VERTICAL << " \e[1;36m" << label << "\e[0m  \e[1;32m";
+    for (int i = 0; i < filled; i++) std::cout << BOX_PROGRESS_FILLED;
+    std::cout << "\e[0;32m";
+    for (int i = filled; i < barWidth; i++) std::cout << BOX_PROGRESS_EMPTY;
+    std::cout << "\e[0m  \e[1;33m" << valueStr << "\e[0m " << BOX_VERTICAL << std::endl;
+}
+
 // Draw Network Difficulty row with inline meter bar showing position between historical min/max
 static void drawDifficultyRow(double currentDifficulty, int rowWidth = 74) {
     // Load difficulty history on first run (from file or blockchain)
@@ -928,12 +965,18 @@ int printMiningStatus(bool mining)
             lines++;
 
             // Show mining probability and expected time to find block
-            double currentHashrate = GetLocalSolPS();
-            double difficulty = GetNetworkDifficulty(chainActive.Tip());
+            if (!benchmarkMode.load()) {
+                double currentHashrate = GetLocalSolPS();
+                double expectedTime = calculateExpectedBlockTime(currentHashrate);
 
-            if (currentHashrate > 0 && difficulty > 0 && !benchmarkMode.load()) {
-                double expectedTime = calculateExpectedBlockTime(currentHashrate, difficulty);
-                std::string expectedTimeStr = DisplayDuration(expectedTime, DurationFormat::REDUCED);
+                // Show expected time (or "Calculating..." if hashrate is still 0)
+                if (currentHashrate > 0 && expectedTime > 0) {
+                    std::string expectedTimeStr = DisplayDuration(expectedTime, DurationFormat::FULL);
+                    drawRow("Expected Time", expectedTimeStr);
+                } else {
+                    drawRow("Expected Time", "\e[1;33mCalculating...\e[0m");
+                }
+                lines++;
 
                 // Calculate time since mining started or last block found
                 int64_t timeMining = 0;
@@ -945,10 +988,6 @@ int printMiningStatus(bool mining)
                 } else if (miningStart > 0) {
                     timeMining = GetTime() - miningStart;
                 }
-
-                // Show expected time
-                drawRow("Expected Time", expectedTimeStr);
-                lines++;
 
                 // Show luck for last block found (if any this session)
                 if (lastBlockFoundTime.load() > 0 && lastBlockLuckPercent.load() > 0) {
@@ -965,17 +1004,12 @@ int printMiningStatus(bool mining)
                     lines++;
                 }
 
-                // Show progress toward finding next block
-                if (timeMining > 0) {
-                    double progressPercent = (timeMining / expectedTime) * 100.0;
-                    if (progressPercent > 999) progressPercent = 999;  // Cap display at 999%
+                // Always show progress toward finding next block (even at 0%)
+                double progressPercent = (timeMining > 0 && expectedTime > 0) ? (timeMining / expectedTime) * 100.0 : 0.0;
+                if (progressPercent > 999) progressPercent = 999;  // Cap display at 999%
 
-                    std::string progressStr = strprintf("%.1f%% (%s elapsed)",
-                        progressPercent,
-                        DisplayDuration(timeMining, DurationFormat::REDUCED).c_str());
-                    drawRow("Progress", progressStr);
-                    lines++;
-                }
+                drawProgressRow(progressPercent, timeMining);
+                lines++;
             }
 
             // Show benchmark status if active
