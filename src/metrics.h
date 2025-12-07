@@ -23,6 +23,10 @@ struct AtomicCounter {
         ++value;
     }
 
+    void increment(uint64_t amount){
+        value.fetch_add(amount, std::memory_order_relaxed);
+    }
+
     void decrement(){
         --value;
     }
