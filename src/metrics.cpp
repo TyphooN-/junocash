@@ -932,7 +932,7 @@ static void drawCentered(const std::string& text, const std::string& color = "",
 }
 
 // Draw a progress bar
-static void drawProgressBar(int percent, int width = 74) {
+static void drawProgressBar(int percent, int width = 72) {
     int filled = (percent * width) / 100;
     std::cout << BOX_VERTICAL << " \e[1;32m";
     for (int i = 0; i < filled; i++) std::cout << BOX_PROGRESS_FILLED;
@@ -1342,7 +1342,7 @@ int printMiningStatus(bool mining)
                                    << (dimm.size() + 512*1024*1024) / (1024*1024*1024) << " GB";
 
                             // Add type if available and not "Undefined"
-                            std::string typeStr = dimm.type().data();
+                            std::string typeStr = dimm.type();
                             if (!typeStr.empty() && typeStr != "Undefined" && typeStr != "Unknown") {
                                 dimmSS << " " << typeStr;
                             }
