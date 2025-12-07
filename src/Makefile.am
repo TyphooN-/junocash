@@ -382,6 +382,11 @@ libbitcoin_server_a_SOURCES = \
   main.cpp \
   merkleblock.cpp \
   metrics.cpp \
+  hw/dmi/DmiBoard.cpp \
+  hw/dmi/DmiMemory.cpp \
+  hw/dmi/DmiReader.cpp \
+  hw/dmi/DmiReader_unix.cpp \
+  hw/dmi/DmiTools.cpp \
   miner.cpp \
   net.cpp \
   noui.cpp \

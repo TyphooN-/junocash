@@ -2160,6 +2160,9 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     } else {
         // Normal mining mode (not benchmark)
         GenerateBitcoins(enableMining, GetArg("-genproclimit", DEFAULT_GENERATE_THREADS), chainparams);
+        if (enableMining) {
+            SetMiningStartTime();  // Track start time for progress display
+        }
     }
 #endif
 

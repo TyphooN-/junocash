@@ -19,6 +19,7 @@
 #include "util/strencodings.h"
 #include "wallet/wallet.h"
 #include "crypto/randomx_wrapper.h"
+#include "hw/dmi/DmiReader.h"
 
 #include <boost/range/irange.hpp>
 #include <boost/thread.hpp>
@@ -36,6 +37,7 @@
 #include <vector>
 #include <set>
 #include <map>
+#include <mutex>
 #ifdef WIN32
 #include <io.h>
 #include <wincon.h>
@@ -179,40 +181,156 @@ static std::atomic<bool> difficultyHistoryInitialized(false);
 // External function declarations
 extern int64_t GetNetworkHashPS(int lookup, int height);
 
+// DMI/SMBIOS hardware information reader
+static xmrig::DmiReader* g_dmiReader = nullptr;
+static std::once_flag g_dmiReaderInitFlag;
+
+// Initialize DMI reader (called once)
+static void InitDmiReader() {
+    std::call_once(g_dmiReaderInitFlag, []() {
+        LogPrintf("DMI/SMBIOS: Initializing reader...\n");
+        g_dmiReader = new xmrig::DmiReader();
+        if (!g_dmiReader->read()) {
+            // Failed to read DMI, but don't delete - keep for API
+            LogPrintf("DMI/SMBIOS: Failed to read hardware information\n");
+        } else {
+            LogPrintf("DMI/SMBIOS: Successfully read hardware information\n");
+            LogPrintf("DMI/SMBIOS: Found %d memory modules\n", g_dmiReader->memory().size());
+
+            // Log each memory module
+            for (const auto& dimm : g_dmiReader->memory()) {
+                if (dimm.isValid()) {
+                    LogPrintf("DMI/SMBIOS: Memory module - slot=%s, size=%llu bytes, valid=%d\n",
+                        dimm.slot().data(), dimm.size(), dimm.isValid() ? 1 : 0);
+                }
+            }
+        }
+    });
+}
+
 // Get motherboard model from DMI/SMBIOS
 static std::string GetMotherboardModel() {
-#if defined(__linux__)
-    // Try reading from DMI/SMBIOS
-    std::ifstream vendor("/sys/class/dmi/id/board_vendor");
-    std::ifstream name("/sys/class/dmi/id/board_name");
+    InitDmiReader();
 
-    std::string vendorStr, nameStr;
-    if (vendor.is_open() && name.is_open()) {
-        std::getline(vendor, vendorStr);
-        std::getline(name, nameStr);
+    if (g_dmiReader && g_dmiReader->board().isValid()) {
+        const auto& board = g_dmiReader->board();
+        std::string vendor = board.vendor().data();
+        std::string product = board.product().data();
 
-        // Trim whitespace
-        vendorStr.erase(vendorStr.find_last_not_of(" \n\r\t") + 1);
-        nameStr.erase(nameStr.find_last_not_of(" \n\r\t") + 1);
-
-        if (!vendorStr.empty() && !nameStr.empty()) {
-            return vendorStr + " " + nameStr;
+        if (!vendor.empty() && !product.empty()) {
+            return vendor + " " + product;
+        } else if (!product.empty()) {
+            return product;
+        } else if (!vendor.empty()) {
+            return vendor;
         }
     }
-#elif defined(__APPLE__)
-    // On macOS, use sysctl to get model info
-    char model[256];
-    size_t len = sizeof(model);
-    if (sysctlbyname("hw.model", model, &len, nullptr, 0) == 0) {
-        return std::string(model);
-    }
-#elif defined(_WIN32)
-    // On Windows, read from registry
-    // This would require Windows API calls - for now return placeholder
-    // Could use WMI queries: SELECT * FROM Win32_BaseBoard
-    return "Windows Motherboard";
-#endif
+
     return "Unknown";
+}
+
+// Forward declaration
+static std::string GetMemoryInfo();
+
+// Get detailed memory information with DIMMs
+static std::string GetDetailedMemoryInfo() {
+    InitDmiReader();
+
+    if (g_dmiReader && !g_dmiReader->memory().empty()) {
+        const auto& memory = g_dmiReader->memory();
+        std::stringstream ss;
+        uint64_t totalMemory = 0;
+        std::map<char, int> channelDimmCount;
+        std::vector<std::string> dimmDetails;
+
+        // Collect info from all populated DIMMs
+        for (const auto& dimm : memory) {
+            if (dimm.isValid() && dimm.size() > 0) {
+                totalMemory += dimm.size();
+
+                // Extract channel
+                std::string slotId = dimm.id().data();
+                size_t underscorePos = slotId.find('_');
+                if (underscorePos != std::string::npos && underscorePos + 1 < slotId.length()) {
+                    char channelChar = slotId[underscorePos + 1];
+                    if (channelChar >= 'A' && channelChar <= 'Z') {
+                        channelDimmCount[channelChar]++;
+                    }
+                }
+
+                // Format DIMM details
+                std::string dimmInfo = strprintf("  %s: %d GB %s @ %llu MHz",
+                    dimm.id().data(),
+                    (dimm.size() + 512*1024*1024) / (1024*1024*1024),
+                    dimm.type(),
+                    dimm.speed() / 1000000);
+
+                if (dimm.product().isValid() && !dimm.product().isEmpty()) {
+                    dimmInfo += std::string(" ") + dimm.product().data();
+                }
+                dimmDetails.push_back(dimmInfo);
+            }
+        }
+
+        if (totalMemory > 0) {
+            // Total with channel info and DPC
+            ss << (totalMemory + 512*1024*1024) / (1024*1024*1024) << " GB";
+
+            if (!channelDimmCount.empty()) {
+                int numChannels = channelDimmCount.size();
+
+                // Calculate DPC (DIMMs per channel)
+                std::map<int, int> dpcFrequency;
+                for (const auto& pair : channelDimmCount) {
+                    dpcFrequency[pair.second]++;
+                }
+
+                int mostCommonDPC = 0;
+                int maxFrequency = 0;
+                for (const auto& pair : dpcFrequency) {
+                    if (pair.second > maxFrequency) {
+                        maxFrequency = pair.second;
+                        mostCommonDPC = pair.first;
+                    }
+                }
+
+                // Format channel description
+                std::string channelDesc;
+                if (numChannels == 1) channelDesc = "Single Channel";
+                else if (numChannels == 2) channelDesc = "Dual Channel";
+                else if (numChannels == 3) channelDesc = "Triple Channel";
+                else if (numChannels == 4) channelDesc = "Quad Channel";
+                else if (numChannels == 6) channelDesc = "Hexa Channel";
+                else if (numChannels == 8) channelDesc = "Octa Channel";
+                else if (numChannels == 12) channelDesc = "Dodeca Channel";
+                else {
+                    std::stringstream cs;
+                    cs << numChannels << "-Channel";
+                    channelDesc = cs.str();
+                }
+
+                // Add channel and DPC info
+                if (mostCommonDPC > 0) {
+                    ss << " (" << channelDesc << ", " << mostCommonDPC << "DPC)";
+                } else {
+                    ss << " (" << channelDesc << ")";
+                }
+            }
+
+            // Add DIMM details
+            if (!dimmDetails.empty()) {
+                ss << "\n";
+                for (const auto& detail : dimmDetails) {
+                    ss << detail << "\n";
+                }
+            }
+
+            return ss.str();
+        }
+    }
+
+    // Fallback to simple info
+    return GetMemoryInfo();
 }
 
 // Get memory information (DIMMs, speed, channels)
@@ -446,6 +564,12 @@ void RecordBlockFound(int64_t timeMining, double difficulty, double hashrate)
                   DisplayDuration(expectedTime, DurationFormat::REDUCED).c_str(),
                   DisplayDuration(timeMining, DurationFormat::REDUCED).c_str());
     }
+}
+
+// Set mining start time (called when mining begins)
+void SetMiningStartTime()
+{
+    miningStartTime = GetTime();
 }
 
 // Store benchmark results
@@ -1116,11 +1240,133 @@ int printMiningStatus(bool mining)
                 lines++;
             }
 
-            // Show memory info
-            static std::string memoryInfo = GetMemoryInfo();
-            if (memoryInfo != "Unknown") {
-                drawRow("Memory", memoryInfo);
-                lines++;
+            // Show memory DIMMs (detailed info from DMI)
+            InitDmiReader();
+            if (g_dmiReader && !g_dmiReader->memory().empty()) {
+                const auto& memory = g_dmiReader->memory();
+                bool hasMemory = false;
+
+                // Count valid/populated DIMMs
+                for (const auto& dimm : memory) {
+                    if (dimm.isValid() && dimm.size() > 0) {
+                        hasMemory = true;
+                        break;
+                    }
+                }
+
+                if (hasMemory) {
+                    // Show total first with channel info and DPC
+                    uint64_t totalMemory = 0;
+                    std::map<char, int> channelDimmCount;  // Track DIMMs per channel
+
+                    for (const auto& dimm : memory) {
+                        if (dimm.isValid() && dimm.size() > 0) {
+                            totalMemory += dimm.size();
+
+                            // Extract channel from slot ID (e.g., "DIMM_A1" -> 'A')
+                            std::string slotId = dimm.id().data();
+                            char channelChar = 0;
+
+                            // Look for pattern: DIMM_X# where X is the channel letter
+                            size_t underscorePos = slotId.find('_');
+                            if (underscorePos != std::string::npos && underscorePos + 1 < slotId.length()) {
+                                channelChar = slotId[underscorePos + 1];
+                                if (channelChar >= 'A' && channelChar <= 'Z') {
+                                    channelDimmCount[channelChar]++;
+                                }
+                            }
+                            // Also try bank locator (e.g., "CHANNEL A")
+                            else if (!dimm.bank().isEmpty()) {
+                                std::string bank = dimm.bank().data();
+                                for (char c : bank) {
+                                    if (c >= 'A' && c <= 'Z') {
+                                        channelDimmCount[c]++;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (totalMemory > 0) {
+                        std::string memoryStr = strprintf("%d GB", (totalMemory + 512*1024*1024) / (1024*1024*1024));
+
+                        // Add channel info and DPC
+                        if (!channelDimmCount.empty()) {
+                            int numChannels = channelDimmCount.size();
+
+                            // Calculate DPC (DIMMs per channel) - use the most common value
+                            std::map<int, int> dpcFrequency;
+                            for (const auto& pair : channelDimmCount) {
+                                dpcFrequency[pair.second]++;
+                            }
+
+                            int mostCommonDPC = 0;
+                            int maxFrequency = 0;
+                            for (const auto& pair : dpcFrequency) {
+                                if (pair.second > maxFrequency) {
+                                    maxFrequency = pair.second;
+                                    mostCommonDPC = pair.first;
+                                }
+                            }
+
+                            // Format channel description
+                            std::string channelDesc;
+                            if (numChannels == 1) channelDesc = "Single Channel";
+                            else if (numChannels == 2) channelDesc = "Dual Channel";
+                            else if (numChannels == 3) channelDesc = "Triple Channel";
+                            else if (numChannels == 4) channelDesc = "Quad Channel";
+                            else if (numChannels == 6) channelDesc = "Hexa Channel";
+                            else if (numChannels == 8) channelDesc = "Octa Channel";
+                            else if (numChannels == 12) channelDesc = "Dodeca Channel";
+                            else channelDesc = strprintf("%d-Channel", numChannels);
+
+                            // Add DPC info if valid
+                            if (mostCommonDPC > 0) {
+                                memoryStr += strprintf(" (%s, %dDPC)", channelDesc.c_str(), mostCommonDPC);
+                            } else {
+                                memoryStr += strprintf(" (%s)", channelDesc.c_str());
+                            }
+                        }
+
+                        drawRow("Memory", memoryStr);
+                        lines++;
+                    }
+
+                    // Show individual DIMMs (only populated ones)
+                    for (const auto& dimm : memory) {
+                        if (dimm.isValid() && dimm.size() > 0) {
+                            // Format: DIMM_A1: 32 GB DDR4 Corsair CMK16GX4M2B3200C16 @ 3133 MHz
+                            std::stringstream dimmSS;
+                            dimmSS << dimm.id().data() << ": "
+                                   << (dimm.size() + 512*1024*1024) / (1024*1024*1024) << " GB "
+                                   << dimm.type();
+
+                            // Add vendor if available
+                            if (dimm.vendor().isValid() && !dimm.vendor().isEmpty()) {
+                                dimmSS << " " << dimm.vendor().data();
+                            }
+
+                            // Add product/model if available
+                            if (dimm.product().isValid() && !dimm.product().isEmpty()) {
+                                dimmSS << " " << dimm.product().data();
+                            }
+
+                            // Add speed at the end
+                            dimmSS << " @ " << dimm.speed() / 1000000 << " MHz";
+
+                            drawRow("", dimmSS.str());
+                            lines++;
+                        }
+                    }
+                }
+            } else {
+                // Fallback to simple memory info
+                static std::string memoryInfo = GetMemoryInfo();
+                if (memoryInfo != "Unknown") {
+                    drawRow("Memory", memoryInfo);
+                    lines++;
+                }
             }
 
             // Show motherboard model
@@ -1576,7 +1822,7 @@ static void toggleMining()
     GenerateBitcoins(!currentlyMining, nThreads, Params());
 
     if (!currentlyMining) {
-        miningStartTime = GetTime();  // Track start time for warmup display
+        SetMiningStartTime();  // Track start time for warmup display
         LogPrintf("User enabled mining with %d threads\n", nThreads);
     } else {
         miningStartTime = 0;  // Clear start time when mining stops
@@ -1612,7 +1858,7 @@ static void toggleFastMode()
         // Restart mining
         int nThreads = GetArg("-genproclimit", 1);
         GenerateBitcoins(true, nThreads, Params());
-        miningStartTime = GetTime();
+        SetMiningStartTime();
     } else {
         // Switching to Fast Mode
         LogPrintf("User switching to Fast Mode\n");
@@ -1632,7 +1878,7 @@ static void toggleFastMode()
         // Restart mining
         int nThreads = GetArg("-genproclimit", 1);
         GenerateBitcoins(true, nThreads, Params());
-        miningStartTime = GetTime();
+        SetMiningStartTime();
     }
 }
 
@@ -1666,7 +1912,7 @@ static void toggleLightMode()
         // Restart mining
         int nThreads = GetArg("-genproclimit", 1);
         GenerateBitcoins(true, nThreads, Params());
-        miningStartTime = GetTime();
+        SetMiningStartTime();
     }
 }
 
@@ -1704,7 +1950,7 @@ static void toggleHugepages()
     // Restart mining
     int nThreads = GetArg("-genproclimit", 1);
     GenerateBitcoins(true, nThreads, Params());
-    miningStartTime = GetTime();
+    SetMiningStartTime();
 }
 
 // Store original thread count before benchmark
@@ -2021,7 +2267,7 @@ static void promptForThreads(int screenHeight)
 
                 // Restart mining with new thread count
                 GenerateBitcoins(true, threads, Params());
-                miningStartTime = GetTime();  // Track start time for warmup display
+                SetMiningStartTime();  // Track start time for warmup display
                 LogPrintf("User set mining threads to %d (mining restarted, counters reset)\n", threads);
             } else {
                 LogPrintf("User set mining threads to %d (will apply when mining starts)\n", threads);
@@ -2189,7 +2435,7 @@ void ThreadBenchmarkMining()
     std::string cpuVendor = GetCPUVendor();
     std::string cpuModel = GetCPUModel();
     std::string cpuInfo = GetCPUInfo();
-    std::string memInfo = GetMemoryInfo();
+    std::string memInfo = GetDetailedMemoryInfo();  // Use detailed memory info for benchmarks
     std::string motherboardName = GetMotherboardName();
     std::string motherboardNameClean = GetMotherboardNameForFilename();
     int cpuCores = GetCPUCores();
@@ -2491,7 +2737,7 @@ void ThreadBenchmarkMining()
                 // Start mining with optimal configuration
                 LogPrintf("Starting mining with optimal configuration\n");
                 GenerateBitcoins(true, bestThreads, Params());
-                miningStartTime = GetTime();  // Track start time for warmup display
+                SetMiningStartTime();  // Track start time for warmup display
 
                 benchmarkLog << "\nAuto-applied optimal settings:\n";
                 benchmarkLog << "  - Updated junocashd.conf with best mode: " << bestMode << "\n";
@@ -2527,7 +2773,7 @@ void ThreadBenchmarkMining()
                 mapArgs["-gen"] = "1";
 
                 GenerateBitcoins(true, bestThreads, Params());
-                miningStartTime = GetTime();  // Track start time for warmup display
+                SetMiningStartTime();  // Track start time for warmup display
             }
         }
 
@@ -2616,7 +2862,7 @@ void ThreadBenchmarkMining()
 
                     LogPrintf("Starting mining with %s mode, %d threads (from partial results)\n", bestMode, bestThreads);
                     GenerateBitcoins(true, bestThreads, Params());
-                    miningStartTime = GetTime();  // Track start time for warmup display
+                    SetMiningStartTime();  // Track start time for warmup display
 
                     benchmarkLog << "\nAuto-applied partial results:\n";
                     benchmarkLog << "  - Updated junocashd.conf with best mode: " << bestMode << "\n";
@@ -2648,7 +2894,7 @@ void ThreadBenchmarkMining()
                     mapArgs["-gen"] = "1";
 
                     GenerateBitcoins(true, bestThreads, Params());
-                    miningStartTime = GetTime();  // Track start time for warmup display
+                    SetMiningStartTime();  // Track start time for warmup display
                 }
             }
         } else {
