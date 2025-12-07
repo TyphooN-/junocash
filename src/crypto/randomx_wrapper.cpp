@@ -4,6 +4,7 @@
 
 #include "randomx_wrapper.h"
 #include "randomx/randomx.h"
+#include "crypto/cpu_features.h"
 #include "util/system.h"
 
 #include <mutex>
@@ -18,6 +19,9 @@
 static bool rx_fast_mode = false;
 static bool rx_use_hugepages = false;
 static std::atomic<bool> rx_initialized{false};
+
+// Scratchpad prefetch mode (default to T0 - best for most CPUs)
+static RandomX_ScratchpadPrefetchMode rx_prefetch_mode = RANDOMX_PREFETCH_T0;
 
 // Multi-cache system to support concurrent access to multiple seeds
 // This is essential for reindex and sync scenarios where background threads
@@ -306,6 +310,13 @@ void RandomX_Init(bool fastMode, bool useHugePages)
         return;  // Already initialized
     }
 
+    // Detect CPU features
+    CPUFeatures::Detect();
+
+    // Check if hardware AES is available
+    bool has_hw_aes = CPUFeatures::HasAES();
+    LogPrintf("RandomX: Hardware AES-NI: %s\n", has_hw_aes ? "YES" : "NO (will use software AES)");
+
     rx_fast_mode = fastMode;
     rx_use_hugepages = useHugePages;
     LogPrintf("RandomX: Initializing %s mode%s\n",
@@ -330,6 +341,10 @@ void RandomX_Init(bool fastMode, bool useHugePages)
     if (fastMode && cache) {
         GetOrCreateDataset(genesisSeed, cache);
     }
+
+    // Note: Scratchpad prefetch is handled internally by RandomX
+    // The prefetch mode API is an xmrig-specific enhancement not in standard RandomX
+    LogPrintf("RandomX: Scratchpad prefetch: Handled by RandomX library\n");
 
     LogPrintf("RandomX: Initialization complete\n");
 }
@@ -554,4 +569,26 @@ bool RandomX_Verify(const void* input, size_t inputSize, const uint256& expected
     }
 
     return computedHash == expectedHash;
+}
+
+void RandomX_SetScratchpadPrefetchMode(RandomX_ScratchpadPrefetchMode mode)
+{
+    if (mode >= RANDOMX_PREFETCH_MAX) {
+        LogPrintf("RandomX: WARNING - Invalid prefetch mode %d, using default\n", mode);
+        return;
+    }
+
+    // Note: Standard RandomX library doesn't expose scratchpad prefetch mode API
+    // Prefetching is handled internally by the RandomX implementation
+    // This function is kept for future compatibility if we integrate xmrig's RandomX fork
+    rx_prefetch_mode = mode;
+
+    const char* mode_names[] = { "off", "t0", "nta", "mov" };
+    LogPrintf("RandomX: Scratchpad prefetch mode (API not available): %s\n", mode_names[mode]);
+    LogPrintf("RandomX: Note - Prefetching is handled internally by RandomX library\n");
+}
+
+RandomX_ScratchpadPrefetchMode RandomX_GetScratchpadPrefetchMode()
+{
+    return rx_prefetch_mode;
 }

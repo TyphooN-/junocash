@@ -1993,6 +1993,9 @@ static bool writeOptimalThreadsToConfig(int threads, const std::string& mode = "
                 if (skipNextLines) {
                     if (line.find("randomxfastmode=") == 0 ||
                         line.find("randomxhugepages=") == 0 ||
+                        line.find("randomxmsr=") == 0 ||
+                        line.find("randomxcacheqos=") == 0 ||
+                        line.find("randomxexceptionhandling=") == 0 ||
                         line.find("genproclimit=") == 0 ||
                         line.find("gen=") == 0 ||
                         line.find("# Best mode:") == 0 ||
@@ -2005,6 +2008,9 @@ static bool writeOptimalThreadsToConfig(int threads, const std::string& mode = "
                 // Also remove any standalone duplicates from earlier runs
                 if (line.find("randomxfastmode=") == 0 ||
                     line.find("randomxhugepages=") == 0 ||
+                    line.find("randomxmsr=") == 0 ||
+                    line.find("randomxcacheqos=") == 0 ||
+                    line.find("randomxexceptionhandling=") == 0 ||
                     line.find("genproclimit=") == 0 ||
                     line.find("gen=") == 0) {
                     continue;  // Skip duplicates
@@ -2046,6 +2052,11 @@ static bool writeOptimalThreadsToConfig(int threads, const std::string& mode = "
             } else {
                 configFile << "randomxhugepages=0\n";
             }
+
+            // Add MSR and cache QoS optimizations (enabled by default)
+            configFile << "randomxmsr=1\n";
+            configFile << "randomxcacheqos=1\n";
+            configFile << "randomxexceptionhandling=1\n";
         }
 
         configFile << "genproclimit=" << threads << "\n";

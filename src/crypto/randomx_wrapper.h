@@ -135,4 +135,30 @@ void RandomX_ChangeMode(bool fastMode, bool useHugePages);
  */
 void RandomX_Shutdown();
 
+/**
+ * Scratchpad prefetch modes for performance tuning.
+ */
+enum RandomX_ScratchpadPrefetchMode {
+    RANDOMX_PREFETCH_OFF = 0,  // No prefetch
+    RANDOMX_PREFETCH_T0,       // prefetcht0 - Fetch to L1/L2/L3 cache (default, best for most CPUs)
+    RANDOMX_PREFETCH_NTA,      // prefetchnta - Fetch to L3 cache only (non-temporal)
+    RANDOMX_PREFETCH_MOV,      // Use MOV instruction for prefetch
+    RANDOMX_PREFETCH_MAX
+};
+
+/**
+ * Set scratchpad prefetch mode for RandomX.
+ * Should be called before mining starts or after RandomX_Init().
+ * Different modes work better on different CPUs.
+ *
+ * @param mode Prefetch mode to use (default: RANDOMX_PREFETCH_T0)
+ */
+void RandomX_SetScratchpadPrefetchMode(RandomX_ScratchpadPrefetchMode mode);
+
+/**
+ * Get current scratchpad prefetch mode.
+ * @return Current prefetch mode
+ */
+RandomX_ScratchpadPrefetchMode RandomX_GetScratchpadPrefetchMode();
+
 #endif // BITCOIN_CRYPTO_RANDOMX_WRAPPER_H

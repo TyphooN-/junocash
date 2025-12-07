@@ -471,6 +471,15 @@ crypto_libbitcoin_crypto_a_SOURCES = \
   crypto/hmac_sha512.h \
   crypto/randomx_wrapper.cpp \
   crypto/randomx_wrapper.h \
+  crypto/randomx_msr.cpp \
+  crypto/randomx_msr.h \
+  crypto/randomx_fix.cpp \
+  crypto/randomx_fix.h \
+  crypto/msr.cpp \
+  crypto/msr.h \
+  crypto/msr_item.h \
+  crypto/cpu_features.cpp \
+  crypto/cpu_features.h \
   crypto/randomx/randomx.cpp \
   crypto/randomx/randomx.h \
   crypto/randomx/aes_hash.cpp \

@@ -10,6 +10,9 @@
 // Juno Cash: Legacy Equihash - kept for reference
 // #include "pow/tromp/equi_miner.h"
 #include "crypto/randomx_wrapper.h"
+#include "crypto/randomx_msr.h"
+#include "crypto/randomx_fix.h"
+#include "crypto/cpu_features.h"
 #include "numa_helper.h"
 #endif
 
@@ -920,11 +923,15 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
 
     // NUMA: Pin thread to CPU if available for optimal memory access on multi-socket systems
     NumaHelper& numa = NumaHelper::GetInstance();
+    int cpu_id = -1;
     if (numa.IsNUMAAvailable()) {
-        int cpu_id = numa.GetCPUForThread(thread_id, total_threads);
+        cpu_id = numa.GetCPUForThread(thread_id, total_threads);
         if (cpu_id >= 0 && numa.PinCurrentThread(cpu_id)) {
             LogPrint("numa", "NUMA: Thread %d pinned to CPU %d (node %d)\n",
                      thread_id, cpu_id, numa.GetNodeForThread(thread_id, total_threads));
+
+            // Sleep briefly to ensure thread migration completes (xmrig pattern)
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
     }
 
@@ -1213,6 +1220,8 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
 void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainparams)
 {
     static boost::thread_group* minerThreads = NULL;
+    static bool msr_initialized = false;
+    static bool exception_handler_initialized = false;
 
     if (nThreads < 0)
         nThreads = GetNumCores();
@@ -1223,6 +1232,18 @@ void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainpar
         minerThreads->join_all();
         delete minerThreads;
         minerThreads = NULL;
+
+        // Clean up MSR on shutdown
+        if (msr_initialized) {
+            RandomX_Msr::Destroy();
+            msr_initialized = false;
+        }
+
+        // Remove exception handlers
+        if (exception_handler_initialized) {
+            RandomX_Fix::RemoveMainLoopExceptionFrame();
+            exception_handler_initialized = false;
+        }
     }
 
     if (nThreads == 0 || !fGenerate)
@@ -1230,6 +1251,37 @@ void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainpar
 
     // Initialize NUMA before spawning threads for optimal thread-to-CPU pinning
     NumaHelper::GetInstance().Initialize();
+
+    // Initialize Ryzen exception handling for JIT stability
+    if (!exception_handler_initialized && GetBoolArg("-randomxexceptionhandling", true)) {
+        RandomX_Fix::SetupMainLoopExceptionFrame();
+        exception_handler_initialized = true;
+    }
+
+    // Initialize MSR optimizations if enabled
+    if (!msr_initialized && GetBoolArg("-randomxmsr", true)) {
+        // Build list of CPU affinities for mining threads
+        std::vector<int> thread_affinities;
+        NumaHelper& numa = NumaHelper::GetInstance();
+        if (numa.IsNUMAAvailable()) {
+            for (int i = 0; i < nThreads; i++) {
+                int cpu_id = numa.GetCPUForThread(i, nThreads);
+                if (cpu_id >= 0) {
+                    thread_affinities.push_back(cpu_id);
+                }
+            }
+        }
+
+        // Initialize MSR with cache QoS if affinities are set
+        bool enable_cache_qos = GetBoolArg("-randomxcacheqos", true);
+        if (RandomX_Msr::Init(thread_affinities, enable_cache_qos)) {
+            LogPrintf("RandomX MSR optimizations enabled (10-15%% expected hashrate improvement)\n");
+            msr_initialized = true;
+        } else {
+            LogPrintf("RandomX MSR optimizations FAILED - mining will proceed without MSR mods\n");
+            LogPrintf("Note: MSR mods require root privileges. Run with sudo or as root for best performance.\n");
+        }
+    }
 
     minerThreads = new boost::thread_group();
     for (int i = 0; i < nThreads; i++) {

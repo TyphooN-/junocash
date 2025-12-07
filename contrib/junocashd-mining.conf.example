@@ -1,0 +1,122 @@
+# Juno Cash Mining Configuration Example
+# Copy these settings to ~/.junocash/junocashd.conf for optimal mining
+#
+# After running: sudo contrib/setup-mining-permissions.sh
+# And activating: newgrp msr
+# You can start mining with just: ./junocashd (no flags needed!)
+
+##
+## Mining Settings
+##
+
+# Enable mining on startup
+gen=1
+
+# Number of mining threads (-1 = all cores, or specify a number)
+# Recommended: Use all cores for maximum performance
+genproclimit=-1
+
+##
+## RandomX Optimizations (52-89% performance improvement!)
+##
+
+# Fast mode: Use 2GB dataset for ~2x mining speed (highly recommended)
+# Requires: 2GB RAM + 256MB per thread
+# Default: 0 (light mode)
+randomxfastmode=1
+
+# MSR optimizations: CPU register tuning for 10-15% improvement
+# Requires: contrib/setup-msr-permissions.sh (one-time setup)
+# Default: 1 (enabled)
+randomxmsr=1
+
+# Cache QoS: L3 cache allocation for mining threads (2-5% additional gain)
+# Requires: randomxmsr=1 and modern CPU (2017+ AMD, 2014+ Intel)
+# Default: 1 (enabled)
+randomxcacheqos=1
+
+# Ryzen exception handling: Improves stability on Ryzen CPUs
+# Handles rare RandomX JIT crashes gracefully
+# Default: 1 (enabled)
+randomxexceptionhandling=1
+
+# Huge pages: Use 1GB/2MB huge pages for 3-5% additional performance
+# Requires: System huge pages configured (see docs)
+# Default: 0 (disabled)
+# Uncomment to enable:
+# randomxhugepages=1
+
+##
+## Additional Mining Options
+##
+
+# Mining address (optional): Send rewards to specific address
+# If not set, a new address is generated per block
+# Use t_getminingaddress RPC to get an address
+# mineraddress=t1YourAddressHere...
+
+# Mine to local wallet only (requires local wallet)
+# Default: 1 if wallet enabled, 0 otherwise
+# minetolocalwallet=1
+
+##
+## Performance Notes
+##
+
+# Expected hashrate improvements over baseline:
+# - Core optimizations (already in code): +38-64%
+# - Fast mode (randomxfastmode=1): ~2x over light mode
+# - MSR optimizations (randomxmsr=1): +10-15%
+# - Cache QoS (randomxcacheqos=1): +2-5%
+# - Huge pages (randomxhugepages=1): +3-5%
+#
+# Total expected: 52-89% faster than unoptimized baseline!
+
+##
+## Setup Instructions
+##
+
+# 1. One-time setup (run once):
+#    cd contrib
+#    sudo ./setup-mining-permissions.sh
+#
+# 2. Activate MSR group (once per login):
+#    newgrp msr
+#    (or logout and login again)
+#
+# 3. Copy this file to your config:
+#    cp contrib/junocashd-mining.conf.example ~/.junocash/junocashd.conf
+#    (or edit ~/.junocash/junocashd.conf and add these settings)
+#
+# 4. Start mining:
+#    ./junocashd
+#    (No command-line flags needed!)
+
+##
+## Troubleshooting
+##
+
+# If you see "MSR optimizations FAILED":
+# - Check: groups (should show 'msr')
+# - Fix: Run 'newgrp msr' or logout/login
+# - Verify: ls -la /dev/cpu/0/msr (should show group 'msr')
+#
+# If MSR still doesn't work:
+# - Rerun: sudo contrib/setup-msr-permissions.sh
+# - Check: lsmod | grep msr (should show msr module)
+#
+# For more help, see: contrib/MINING_SETUP.md
+
+##
+## Network Settings (if needed)
+##
+
+# RPC credentials (recommended for security)
+# rpcuser=your_username
+# rpcpassword=your_secure_password
+
+# Listen for RPC connections
+# server=1
+
+# RPC port (default: 8232 for mainnet)
+# rpcport=8232

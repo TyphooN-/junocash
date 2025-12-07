@@ -503,6 +503,9 @@ std::string HelpMessage(HelpMessageMode mode)
     strUsage += HelpMessageOpt("-equihashsolver=<name>", _("Specify the Equihash solver to be used if enabled (default: \"default\")"));
     strUsage += HelpMessageOpt("-mineraddress=<addr>", _("(NOT NECESSARY) Send mined coins to a specific transparent P2PKH address (t...). A new address is generated per block if not set. Use t_getminingaddress RPC to get an address."));
     strUsage += HelpMessageOpt("-randomxfastmode", _("Use RandomX fast mode with 2GB dataset for ~2x mining speed (default: 0)"));
+    strUsage += HelpMessageOpt("-randomxmsr", _("Enable MSR (Model Specific Register) optimizations for 10-15% hashrate improvement (default: 1, requires setup-msr-permissions.sh)"));
+    strUsage += HelpMessageOpt("-randomxcacheqos", _("Enable L3 cache QoS allocation for mining threads, 2-5% additional improvement (default: 1, requires -randomxmsr=1)"));
+    strUsage += HelpMessageOpt("-randomxexceptionhandling", _("Enable Ryzen JIT exception handling for stability (default: 1)"));
     strUsage += HelpMessageOpt("-randomxhugepages", _("Use hugepages (1GB/2MB) for RandomX memory allocation for 5-10% extra performance. Requires system hugepages configured (default: 0)"));
     strUsage += HelpMessageOpt("-benchmark", _("Automatically benchmark mining performance with different thread counts and save results to benchmark.log (default: 0)"));
     strUsage += HelpMessageOpt("-minetolocalwallet", strprintf(
