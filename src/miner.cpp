@@ -28,6 +28,7 @@
 #include "key_io.h"
 #include "main.h"
 #include "metrics.h"
+#include "rpc/server.h"
 #include "net.h"
 #include "zcash/Note.hpp"
 #include "policy/policy.h"
@@ -1062,6 +1063,12 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
                         // Ignore chain updates caused by us
                         std::lock_guard<std::mutex> lock{m_cs};
                         cancelSolver = false;
+
+                        // Record block found for luck calculation
+                        int64_t timeMining = GetTime() - nStart;
+                        double difficulty = GetDifficulty(chainActive.Tip());
+                        double hashrate = GetLocalSolPS();
+                        RecordBlockFound(timeMining, difficulty, hashrate);
                     }
                     SetThreadPriority(THREAD_PRIORITY_LOWEST);
                     std::visit(KeepMinerAddress(), minerAddress);
