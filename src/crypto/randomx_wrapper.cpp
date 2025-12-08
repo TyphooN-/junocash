@@ -378,12 +378,12 @@ void RandomX_Init(bool fastMode, bool useHugePages)
     }
 
     // Pre-create genesis cache
-    auto cache = GetOrCreateCache(genesisSeed);
+    GetOrCreateCache(genesisSeed);
 
-    // In fast mode, also pre-create the dataset
-    if (fastMode && cache) {
-        GetOrCreateDataset(genesisSeed, cache);
-    }
+    // Note: We do NOT pre-create the dataset for the genesis seed here.
+    // The miner will set the actual block seed shortly after starting, which will
+    // trigger dataset allocation. Pre-allocating genesis dataset wastes 2GB of RAM/Hugepages
+    // and can cause OOM when the miner tries to allocate the actual dataset.
 
     // Note: Scratchpad prefetch is handled internally by RandomX
     // The prefetch mode API is an xmrig-specific enhancement not in standard RandomX
