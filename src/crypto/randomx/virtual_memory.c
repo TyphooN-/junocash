@@ -226,7 +226,19 @@ void* allocLargePagesMemory(size_t bytes) {
 #elif defined(__OpenBSD__) || defined(__NetBSD__)
 	mem = MAP_FAILED; // OpenBSD does not support huge pages
 #else
-	mem = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_POPULATE, -1, 0);
+#ifndef MAP_HUGE_SHIFT
+#define MAP_HUGE_SHIFT 26
+#endif
+#ifndef MAP_HUGE_1GB
+#define MAP_HUGE_1GB (30 << MAP_HUGE_SHIFT)
+#endif
+	// Try 1GB hugepages first
+	mem = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_POPULATE | MAP_HUGE_1GB, -1, 0);
+
+	// Fallback to default (usually 2MB) if 1GB failed
+	if (mem == MAP_FAILED) {
+		mem = mmap(NULL, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_POPULATE, -1, 0);
+	}
 #endif
 	if (mem == MAP_FAILED)
 		mem = NULL;
