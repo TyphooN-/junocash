@@ -1230,7 +1230,6 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
                         RecordBlockFound(timeMining, difficulty, hashrate);
                     }
                     SetThreadPriority(THREAD_PRIORITY_LOWEST);
-                    std::visit(KeepMinerAddress(), minerAddress);
 
                     // In regression test mode, stop mining after a block is found
                     if (chainparams.MineBlocksOnDemand()) {
