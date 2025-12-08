@@ -909,10 +909,14 @@ static inline void IncrementNonce256(uint256& nonce) {
 
 // OPTIMIZATION Priority 16: Even faster increment using cached pointer (0.5% gain)
 static inline void IncrementNonce256_Fast(unsigned char* noncePtr) {
-    // Increment as little-endian 256-bit integer using direct pointer
-    for (int i = 0; i < 32; i++) {
-        if (++noncePtr[i] != 0) break;
-    }
+    // Increment as little-endian 256-bit integer using 64-bit chunks
+    // Unaligned access is efficient on x86_64 and modern ARM
+    uint64_t* nonce64 = reinterpret_cast<uint64_t*>(noncePtr);
+    
+    if (++nonce64[0] != 0) return;
+    if (++nonce64[1] != 0) return;
+    if (++nonce64[2] != 0) return;
+    ++nonce64[3];
 }
 
 void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int total_threads)
