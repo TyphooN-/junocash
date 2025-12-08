@@ -934,6 +934,7 @@ void static BlockTemplateUpdater(const CChainParams& chainparams)
                 fvNodesEmpty = vNodes.empty();
             }
             if (fvNodesEmpty && !IsInitialBlockDownload(chainparams.GetConsensus())) {
+                LogPrint("miner", "BlockTemplateUpdater: Waiting for peers...\n");
                 MilliSleep(1000);
                 continue;
             }
@@ -947,6 +948,7 @@ void static BlockTemplateUpdater(const CChainParams& chainparams)
         }
 
         if (!pindexCurrent) {
+            LogPrintf("BlockTemplateUpdater: No chain tip available\n");
             MilliSleep(1000);
             continue;
         }
@@ -955,43 +957,78 @@ void static BlockTemplateUpdater(const CChainParams& chainparams)
         bool updateNeeded = false;
         {
             std::lock_guard<std::mutex> lock(g_template_mutex);
-            if (!g_shared_template) updateNeeded = true; // First run
+            if (!g_shared_template) {
+                updateNeeded = true; // First run
+                LogPrintf("BlockTemplateUpdater: First run, will create initial template\n");
+            }
         }
-        if (pindexCurrent != pindexPrev) updateNeeded = true; // New block found
-        if (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - nLastUpdateTime > 5) updateNeeded = true; // Mempool changed (throttle 5s)
+        if (pindexCurrent != pindexPrev) {
+            updateNeeded = true; // New block found
+            LogPrint("miner", "BlockTemplateUpdater: New block found, will update template\n");
+        }
+        if (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - nLastUpdateTime > 5) {
+            updateNeeded = true; // Mempool changed (throttle 5s)
+            LogPrint("miner", "BlockTemplateUpdater: Mempool changed, will update template\n");
+        }
+
+        if (!updateNeeded) {
+            LogPrint("miner", "BlockTemplateUpdater: No update needed, sleeping...\n");
+        }
 
         if (updateNeeded) {
             // Get mining address
             std::optional<MinerAddress> maybeMinerAddress;
             GetMainSignals().AddressForMining(maybeMinerAddress);
 
-            if (maybeMinerAddress.has_value() && std::visit(IsValidMinerAddress(), maybeMinerAddress.value())) {
-                try {
-                    auto minerAddress = maybeMinerAddress.value();
-                    // Create new template
-                    // Note: BlockAssembler access is thread-safe (uses cs_main internally)
-                    std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(chainparams).CreateNewBlock(minerAddress));
-                    
+            if (!maybeMinerAddress.has_value()) {
+                LogPrintf("BlockTemplateUpdater: No miner address available (mining requires a wallet or -mineraddress)\n");
+                MilliSleep(5000);
+                continue;
+            }
+
+            if (!std::visit(IsValidMinerAddress(), maybeMinerAddress.value())) {
+                LogPrintf("BlockTemplateUpdater: Invalid miner address\n");
+                MilliSleep(5000);
+                continue;
+            }
+
+            try {
+                auto minerAddress = maybeMinerAddress.value();
+                // Create new template
+                // Note: BlockAssembler access is thread-safe (uses cs_main internally)
+                LogPrintf("BlockTemplateUpdater: About to call CreateNewBlock\n");
+                std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(chainparams).CreateNewBlock(minerAddress));
+                LogPrintf("BlockTemplateUpdater: CreateNewBlock returned, checking result\n");
+
                     if (pblocktemplate) {
+                        LogPrintf("BlockTemplateUpdater: Template created successfully\n");
                         // Update shared template
                         std::lock_guard<std::mutex> lock(g_template_mutex);
-                        
+                        LogPrintf("BlockTemplateUpdater: Acquired mutex lock\n");
+
                         // Verify we are still on the same tip before committing
+                        LogPrintf("BlockTemplateUpdater: Checking chain tip - pindexCurrent=%p, chainActive.Tip()=%p\n",
+                                 pindexCurrent, chainActive.Tip());
                         if (chainActive.Tip() == pindexCurrent) {
                             g_shared_template = std::move(pblocktemplate);
                             g_template_height = pindexCurrent->nHeight + 1;
-                            
+
                             pindexPrev = pindexCurrent;
                             nTransactionsUpdatedLast = mempool.GetTransactionsUpdated();
                             nLastUpdateTime = GetTime();
-                            
-                            LogPrint("miner", "BlockTemplateUpdater: Updated template for height %d (%u txs)\n", 
+
+                            LogPrintf("BlockTemplateUpdater: Updated template for height %d (%u txs)\n",
                                      g_template_height.load(), g_shared_template->block.vtx.size());
+                        } else {
+                            LogPrintf("BlockTemplateUpdater: Chain tip changed during template creation, discarding template\n");
                         }
+                    } else {
+                        LogPrintf("BlockTemplateUpdater: CreateNewBlock returned null\n");
                     }
-                } catch (const std::exception& e) {
-                    LogPrintf("BlockTemplateUpdater: Error creating block template: %s\n", e.what());
-                }
+            } catch (const std::exception& e) {
+                LogPrintf("BlockTemplateUpdater: Error creating block template: %s\n", e.what());
+            } catch (...) {
+                LogPrintf("BlockTemplateUpdater: Unknown exception creating block template\n");
             }
         }
 
@@ -1082,12 +1119,18 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
             {
                 std::lock_guard<std::mutex> lock(g_template_mutex);
                 if (!g_shared_template) {
-                    MilliSleep(100);
-                    continue;
+                    // Release mutex before sleeping by exiting scope
+                }  else {
+                    // Copy block from shared template
+                    pblock_copy = g_shared_template->block;
+                    currentHeight = g_template_height.load();
                 }
-                // Copy block from shared template
-                pblock_copy = g_shared_template->block;
-                currentHeight = g_template_height.load();
+            }
+
+            // Check if we got a template
+            if (currentHeight == 0) {
+                MilliSleep(100);
+                continue;
             }
 
             // Randomize nonce to ensure threads work on different spaces
