@@ -83,6 +83,11 @@ bool RandomX_Hash_Block(const void* input, size_t inputSize, uint256& hash);
  * @param expectedHash The expected hash value
  * @return true if the hash matches, false otherwise
  */
+// Batch hashing API for pipelining
+bool RandomX_HashFirst(const void* input, size_t inputSize);
+bool RandomX_HashNext(const void* nextInput, size_t nextInputSize, void* output);
+bool RandomX_HashLast(void* output);
+
 bool RandomX_Verify_WithSeed(const void* seedhash, size_t seedhashSize,
                              const void* input, size_t inputSize, const uint256& expectedHash);
 
@@ -106,6 +111,9 @@ bool RandomX_Verify(const void* input, size_t inputSize, const uint256& expected
  *                     for 5-10% additional performance. Requires system hugepages configured.
  *                     Falls back to normal memory if allocation fails.
  */
+// Set the NUMA node for the current thread (optimization)
+void RandomX_SetCurrentNode(int node);
+
 void RandomX_Init(bool fastMode = false, bool useHugePages = false);
 
 /**

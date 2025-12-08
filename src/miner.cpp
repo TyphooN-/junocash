@@ -927,8 +927,12 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
     if (numa.IsNUMAAvailable()) {
         cpu_id = numa.GetCPUForThread(thread_id, total_threads);
         if (cpu_id >= 0 && numa.PinCurrentThread(cpu_id)) {
+            int node_id = numa.GetNodeForThread(thread_id, total_threads);
             LogPrint("numa", "NUMA: Thread %d pinned to CPU %d (node %d)\n",
-                     thread_id, cpu_id, numa.GetNodeForThread(thread_id, total_threads));
+                     thread_id, cpu_id, node_id);
+
+            // Set NUMA node for RandomX memory allocation to ensure local memory usage
+            RandomX_SetCurrentNode(node_id);
 
             // Sleep briefly to ensure thread migration completes (xmrig pattern)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -1087,13 +1091,23 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
             uint64_t interruptCheckCounter = 0;
             const uint64_t INTERRUPT_CHECK_INTERVAL = 256;
 
+            // Pipeline state
+            uint8_t noncePrev[32];
+            uint256 hash;
+
+            // Prime the pipeline: Start first hash
+            memcpy(hash_input + 108, noncePtr, 32);
+            RandomX_HashFirst(hash_input, 140);
+            memcpy(noncePrev, noncePtr, 32);
+            IncrementNonce256_Fast(noncePtr);
+
             while (true) {
-                // OPTIMIZATION: Only copy the 32-byte nonce (bytes 108-139)
+                // Prepare next input
                 memcpy(hash_input + 108, noncePtr, 32);
 
-                // Calculate RandomX hash
-                uint256 hash;
-                if (!RandomX_Hash_Block(hash_input, 140, hash)) {
+                // Pipelined hash: Finish previous (noncePrev), Start current (noncePtr)
+                // Note: We use the same input buffer for next input, which is safe as RandomX consumes it immediately
+                if (!RandomX_HashNext(hash_input, 140, hash.begin())) {
                     LogPrintf("RandomX hashing failed\n");
                     break;
                 }
@@ -1103,6 +1117,7 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
 
                 // Check if hash meets target
                 // OPTIMIZATION Priority 14 FIX: Only convert when needed (inside if condition)
+                // Note: 'hash' corresponds to 'noncePrev', not current 'noncePtr'
                 if (UintToArith256(hash) <= hashTarget) {
                     // Found a solution - update metrics with final count
                     ehSolverRuns.increment(hashCount);
@@ -1110,6 +1125,8 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
 
                     // OPTIMIZATION Priority 11: Only copy nSolution when we find a solution (1-2% gain)
                     memcpy(pblock->nSolution.data(), hash.begin(), 32);
+                    // Restore the winning nonce (noncePrev) to the block
+                    memcpy(pblock->nNonce.begin(), noncePrev, 32);
 
                     SetThreadPriority(THREAD_PRIORITY_NORMAL);
                     LogPrintf("JunoMonetaMiner:\n");
@@ -1136,6 +1153,9 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
 
                     break;
                 }
+
+                // Update pipeline state: Current becomes Previous for next iteration
+                memcpy(noncePrev, noncePtr, 32);
 
                 // OPTIMIZATION Priority 6: Batch metric updates every 256 hashes
                 if (hashCount >= METRIC_UPDATE_INTERVAL) {
