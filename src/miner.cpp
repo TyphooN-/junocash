@@ -908,6 +908,98 @@ static inline void IncrementNonce256(uint256& nonce) {
 }
 
 // OPTIMIZATION Priority 16: Even faster increment using cached pointer (0.5% gain)
+// Shared block template for all mining threads
+static std::mutex g_template_mutex;
+static std::unique_ptr<CBlockTemplate> g_shared_template;
+static std::atomic<int> g_template_height{0};
+static std::atomic<bool> g_template_stop{false};
+static boost::thread* g_template_thread = nullptr;
+
+// Background thread to keep the block template updated
+void static BlockTemplateUpdater(const CChainParams& chainparams)
+{
+    LogPrintf("BlockTemplateUpdater started\n");
+    RenameThread("juno-updater");
+
+    unsigned int nTransactionsUpdatedLast = 0;
+    CBlockIndex* pindexPrev = nullptr;
+    int64_t nLastUpdateTime = 0;
+
+    while (!g_template_stop) {
+        // Wait if no peers (if required)
+        if (chainparams.MiningRequiresPeers()) {
+            bool fvNodesEmpty;
+            {
+                LOCK(cs_vNodes);
+                fvNodesEmpty = vNodes.empty();
+            }
+            if (fvNodesEmpty && !IsInitialBlockDownload(chainparams.GetConsensus())) {
+                MilliSleep(1000);
+                continue;
+            }
+        }
+
+        // Get current chain tip
+        CBlockIndex* pindexCurrent;
+        {
+            LOCK(cs_main);
+            pindexCurrent = chainActive.Tip();
+        }
+
+        if (!pindexCurrent) {
+            MilliSleep(1000);
+            continue;
+        }
+
+        // Check if update needed
+        bool updateNeeded = false;
+        {
+            std::lock_guard<std::mutex> lock(g_template_mutex);
+            if (!g_shared_template) updateNeeded = true; // First run
+        }
+        if (pindexCurrent != pindexPrev) updateNeeded = true; // New block found
+        if (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast && GetTime() - nLastUpdateTime > 5) updateNeeded = true; // Mempool changed (throttle 5s)
+
+        if (updateNeeded) {
+            // Get mining address
+            std::optional<MinerAddress> maybeMinerAddress;
+            GetMainSignals().AddressForMining(maybeMinerAddress);
+
+            if (maybeMinerAddress.has_value() && std::visit(IsValidMinerAddress(), maybeMinerAddress.value())) {
+                try {
+                    auto minerAddress = maybeMinerAddress.value();
+                    // Create new template
+                    // Note: BlockAssembler access is thread-safe (uses cs_main internally)
+                    std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(chainparams).CreateNewBlock(minerAddress));
+                    
+                    if (pblocktemplate) {
+                        // Update shared template
+                        std::lock_guard<std::mutex> lock(g_template_mutex);
+                        
+                        // Verify we are still on the same tip before committing
+                        if (chainActive.Tip() == pindexCurrent) {
+                            g_shared_template = std::move(pblocktemplate);
+                            g_template_height = pindexCurrent->nHeight + 1;
+                            
+                            pindexPrev = pindexCurrent;
+                            nTransactionsUpdatedLast = mempool.GetTransactionsUpdated();
+                            nLastUpdateTime = GetTime();
+                            
+                            LogPrint("miner", "BlockTemplateUpdater: Updated template for height %d (%u txs)\n", 
+                                     g_template_height.load(), g_shared_template->block.vtx.size());
+                        }
+                    }
+                } catch (const std::exception& e) {
+                    LogPrintf("BlockTemplateUpdater: Error creating block template: %s\n", e.what());
+                }
+            }
+        }
+
+        MilliSleep(100); // Check every 100ms
+    }
+    LogPrintf("BlockTemplateUpdater stopped\n");
+}
+
 static inline void IncrementNonce256_Fast(unsigned char* noncePtr) {
     // Increment as little-endian 256-bit integer using 64-bit chunks
     // Unaligned access is efficient on x86_64 and modern ARM
@@ -950,13 +1042,6 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
     // Each thread has its own counter
     unsigned int nExtraNonce = 0;
 
-    // Juno Cash: Legacy Equihash parameters removed
-    // unsigned int n = chainparams.GetConsensus().nEquihashN;
-    // unsigned int k = chainparams.GetConsensus().nEquihashK;
-    // std::string solver = GetArg("-equihashsolver", "default");
-    // assert(solver == "tromp" || solver == "default");
-    // LogPrint("pow", "Using Equihash solver \"%s\" with n = %u, k = %u\n", solver, n, k);
-
     LogPrint("pow", "Using RandomX proof-of-work algorithm\n");
 
     std::mutex m_cs;
@@ -969,21 +1054,15 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
     );
     miningTimer.start();
 
+    // OPTIMIZATION Priority 15: Align to 64-byte cache line (0.5-1% gain)
+    alignas(64) uint8_t hash_input[140];
+    CBlock pblock_copy;
+    CBlock* pblock = &pblock_copy;
+
     try {
         while (true) {
-            // Get a fresh address for each block
-            std::optional<MinerAddress> maybeMinerAddress;
-            GetMainSignals().AddressForMining(maybeMinerAddress);
-
-            // Throw an error if no address valid for mining was provided.
-            if (!(maybeMinerAddress.has_value() && std::visit(IsValidMinerAddress(), maybeMinerAddress.value()))) {
-                throw std::runtime_error("No miner address available (mining requires a wallet or -mineraddress)");
-            }
-            auto minerAddress = maybeMinerAddress.value();
-
             if (chainparams.MiningRequiresPeers()) {
-                // Busy-wait for the network to come online so we don't waste time mining
-                // on an obsolete chain. In regtest mode we expect to fly solo.
+                // Busy-wait for the network to come online
                 miningTimer.stop();
                 do {
                     bool fvNodesEmpty;
@@ -998,41 +1077,40 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
                 miningTimer.start();
             }
 
-            //
-            // Create new block
-            //
-            unsigned int nTransactionsUpdatedLast = mempool.GetTransactionsUpdated();
+            // Get shared block template
+            int currentHeight = 0;
+            {
+                std::lock_guard<std::mutex> lock(g_template_mutex);
+                if (!g_shared_template) {
+                    MilliSleep(100);
+                    continue;
+                }
+                // Copy block from shared template
+                pblock_copy = g_shared_template->block;
+                currentHeight = g_template_height.load();
+            }
+
+            // Randomize nonce to ensure threads work on different spaces
+            // This replaces IncrementExtraNonce for work distribution
+            GetRandBytes(pblock->nNonce.begin(), 32);
+
+            LogPrintf("Running JunoMonetaMiner with %u transactions in block (%u bytes)\n", pblock->vtx.size(),
+                ::GetSerializeSize(*pblock, SER_NETWORK, PROTOCOL_VERSION));
+
+            // Calculate RandomX seed for this block height
             CBlockIndex* pindexPrev;
             {
                 LOCK(cs_main);
                 pindexPrev = chainActive.Tip();
             }
 
-            // If we don't have a valid chain tip to work from, wait and try again.
-            if (pindexPrev == nullptr) {
-                MilliSleep(1000);
+            // Verify we are working on the correct height
+            if (!pindexPrev || pindexPrev->nHeight + 1 != currentHeight) {
+                MilliSleep(10);
                 continue;
             }
 
-            unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(chainparams).CreateNewBlock(minerAddress));
-            if (!pblocktemplate.get())
-            {
-                if (GetArg("-mineraddress", "").empty()) {
-                    LogPrintf("Error in JunoCashMiner: Keypool ran out, please call keypoolrefill before restarting the mining thread\n");
-                } else {
-                    // Should never reach here, because -mineraddress validity is checked in init.cpp
-                    LogPrintf("Error in JunoCashMiner: Invalid -mineraddress\n");
-                }
-                return;
-            }
-            CBlock *pblock = &pblocktemplate->block;
-            IncrementExtraNonce(pblocktemplate.get(), pindexPrev, nExtraNonce, chainparams.GetConsensus());
-
-            LogPrintf("Running JunoMonetaMiner with %u transactions in block (%u bytes)\n", pblock->vtx.size(),
-                ::GetSerializeSize(*pblock, SER_NETWORK, PROTOCOL_VERSION));
-
-            // Calculate RandomX seed for this block height
-            uint64_t blockHeight = pindexPrev->nHeight + 1;
+            uint64_t blockHeight = currentHeight;
             uint64_t seedHeight = RandomX_SeedHeight(blockHeight);
             uint256 seedHash;
 
@@ -1061,9 +1139,6 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
             //
             int64_t nStart = GetTime();
             arith_uint256 hashTarget = arith_uint256().SetCompact(pblock->nBits);
-
-            // OPTIMIZATION Priority 15: Align to 64-byte cache line (0.5-1% gain)
-            alignas(64) uint8_t hash_input[140];
 
             // Serialize the 108-byte header (without nonce) ONCE
             {
@@ -1180,14 +1255,14 @@ void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int tot
                     boost::this_thread::interruption_point();
                     interruptCheckCounter = 0;
 
+                    // Check for template update
+                    int latestHeight = g_template_height.load();
+                    if (latestHeight != currentHeight) break;
+
                     // Also check other conditions that don't need per-hash checking
                     if (vNodes.empty() && chainparams.MiningRequiresPeers())
                         break;
-                    // OPTIMIZATION Priority 18: Only call GetTime() if mempool actually changed (0.5% gain)
-                    if (mempool.GetTransactionsUpdated() != nTransactionsUpdatedLast) {
-                        if (GetTime() - nStart > 300)
-                            break;
-                    }
+                    
                     if (pindexPrev != chainActive.Tip())
                         break;
                 }
@@ -1264,6 +1339,14 @@ void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainpar
         delete minerThreads;
         minerThreads = NULL;
 
+        // Stop block template updater
+        g_template_stop = true;
+        if (g_template_thread) {
+            g_template_thread->join();
+            delete g_template_thread;
+            g_template_thread = nullptr;
+        }
+
         // Clean up MSR on shutdown
         if (msr_initialized) {
             RandomX_Msr::Destroy();
@@ -1313,6 +1396,10 @@ void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainpar
             LogPrintf("Note: MSR mods require root privileges. Run with sudo or as root for best performance.\n");
         }
     }
+
+    // Start block template updater
+    g_template_stop = false;
+    g_template_thread = new boost::thread(boost::bind(&BlockTemplateUpdater, boost::cref(chainparams)));
 
     minerThreads = new boost::thread_group();
     for (int i = 0; i < nThreads; i++) {
