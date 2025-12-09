@@ -18,6 +18,8 @@ $(package)_cxxflags_freebsd=-fPIC
 
 ifeq ($(host_os),freebsd)
   $(package)_ldflags+=-static-libstdc++ -lcxxrt
+else ifeq ($(host_os),mingw32)
+  $(package)_ldflags+=-static-libstdc++
 else
   $(package)_ldflags+=-static-libstdc++ -lc++abi
 endif
