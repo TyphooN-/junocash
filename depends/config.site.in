@@ -1,4 +1,10 @@
-depends_prefix="`dirname ${ac_site_file}`/.."
+# depends_prefix="`dirname ${ac_site_file}`/.."
+
+if test -n "${ac_site_file}"; then
+  depends_prefix="`dirname "${ac_site_file}"`/.."
+else
+  depends_prefix="${PWD}/depends"
+fi
 
 cross_compiling=maybe
 host_alias=@HOST@
