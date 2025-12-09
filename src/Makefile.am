@@ -169,7 +169,8 @@ $(LIBRUSTZCASH): cargo-build-lib
 	$(AM_V_at)echo "dlname=''" >>$@
 	$(AM_V_at)echo "library_names=''" >>$@
 	$(AM_V_at)echo "old_library='../$(basename $(@F)).a'" >>$@
-	$(AM_V_at)echo "inherited_linker_flags=''" >>$@
+	$(AM_V_at)echo "inherited_linker_flags='$(LIBZCASH_LIBS)'" >>$@
+	$(AM_V_at)echo "dependency_libs=' $(LIBCXXBRIDGE) '" >>$@
 	$(AM_V_at)echo "installed=no" >>$@
 	$(AM_V_at)echo "shouldnotlink=no" >>$@
 
