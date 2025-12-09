@@ -1,3 +1,6 @@
+mingw32_CC=clang -target $(host) -B$(build_prefix)/bin
+mingw32_CXX=clang++ -target $(host) -B$(build_prefix)/bin -stdlib=libc++
+
 mingw32_CFLAGS=-pipe
 mingw32_CXXFLAGS=$(mingw32_CFLAGS) -isystem $(host_prefix)/include/c++/v1
 
@@ -13,3 +16,4 @@ mingw32_debug_CXXFLAGS=$(mingw32_debug_CFLAGS)
 mingw32_debug_CPPFLAGS=-D_GLIBCXX_DEBUG -D_GLIBCXX_DEBUG_PEDANTIC
 
 mingw32_cmake_system=Windows
+x86_64_mingw32_native_toolchain=native_clang
