@@ -1,3 +1,6 @@
+mingw32_CC=clang -target $(host) -B$(build_prefix)/bin
+mingw32_CXX=clang++ -target $(host) -B$(build_prefix)/bin
+
 mingw32_CFLAGS=-pipe
 mingw32_CXXFLAGS=$(mingw32_CFLAGS)
 
