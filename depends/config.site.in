@@ -36,7 +36,7 @@ CPPFLAGS="-I$depends_prefix/include/ $CPPFLAGS"
 if test x@host_os@ = xfreebsd; then
   LDFLAGS="-L$depends_prefix/lib $LDFLAGS -static-libstdc++ -lcxxrt"
 elif test x@host_os@ = xmingw32; then
-  LDFLAGS="-L$depends_prefix/lib $LDFLAGS -static-libstdc++"
+  LDFLAGS="-L$depends_prefix/lib $LDFLAGS -static-libstdc++ -lpthread"
 else
   LDFLAGS="-L$depends_prefix/lib $LDFLAGS -static-libstdc++ -lc++abi"
 fi
