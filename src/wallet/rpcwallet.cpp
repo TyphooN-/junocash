@@ -524,6 +524,7 @@ static std::string ReceiverTypeToString(ReceiverType t)
         case ReceiverType::Sapling: return "sapling";
         case ReceiverType::Orchard: return "orchard";
     }
+    return "unknown";
 }
 
 /// On failure, returns a non-empty set of the strings that don’t represent valid receiver types.

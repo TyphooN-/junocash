@@ -398,6 +398,7 @@ WalletTxBuilder::GetChangeAddress(
                         case AccountChangeAddressFailure::NoSuchAccount:
                             throw std::runtime_error("Selector account doesn’t exist.");
                     }
+                    return AddressResolutionError::CouldNotResolveReceiver;
                 });
 
         }
