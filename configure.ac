@@ -755,7 +755,7 @@ if test x$use_hardening != xno; then
   AX_CHECK_COMPILE_FLAG([-Wformat-security],[HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -Wformat-security"],[AC_MSG_ERROR(Cannot enable -Wformat-security)],[-Wformat])
   AX_CHECK_COMPILE_FLAG([-Wstack-protector],[HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -Wstack-protector"],[AC_MSG_ERROR(Cannot enable -Wstack-protector)])
   AX_CHECK_COMPILE_FLAG([-fstack-protector-all],[HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -fstack-protector-all"],[AC_MSG_ERROR(Cannot enable -fstack-protector-all)])
-  AX_CHECK_COMPILE_FLAG([-Wthread-safety-analysis],[HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -Wthread-safety-analysis"],[AC_MSG_ERROR(Cannot enable -Wthread-safety-analysis)])
+  AX_CHECK_COMPILE_FLAG([-Wthread-safety-analysis],[HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -Wthread-safety-analysis"],[AC_MSG_WARN(Cannot enable -Wthread-safety-analysis)])
 
   AX_CHECK_PREPROC_FLAG([-D_FORTIFY_SOURCE=2],[
     AX_CHECK_PREPROC_FLAG([-U_FORTIFY_SOURCE],[
