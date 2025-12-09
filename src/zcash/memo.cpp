@@ -4,6 +4,7 @@
 
 #include "zcash/memo.h"
 
+#include <algorithm>
 #include <utf8cpp/utf8.h>
 
 namespace libzcash {
