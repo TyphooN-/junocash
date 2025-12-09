@@ -65,6 +65,6 @@ endef
 # convention. This causes issues with lld, so we rename all .lib files to .a.
 ifeq ($(host_os),mingw32)
 define $(package)_postprocess_cmds
-  for f in lib/*.lib; do mv -- "$$$$f" "$$$${f%.lib}.a"; done
+  if ls lib/*.lib >/dev/null 2>&1; then for f in lib/*.lib; do mv -- "$$$$f" "$$$${f%.lib}.a"; done; fi
 endef
 endif
