@@ -335,6 +335,15 @@ bool CDBEnv::RemoveDb(const string& strFile)
     return (rc == 0);
 }
 
+// GCC 15+ produces false-positive -Wstringop-overflow warnings in the template instantiation
+// chain from Serialize -> ser_writedata32 -> CBaseDataStream::write -> vector::insert.
+// The warnings claim buffer overflow when writing 4 bytes for an int32_t, but this is safe code.
+// Disable this warning for the entire function to avoid build failures with newer GCC versions.
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 14
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
+
 bool CDB::Rewrite(const string& strFile, const char* pszSkip)
 {
     while (true) {
@@ -417,6 +426,10 @@ bool CDB::Rewrite(const string& strFile, const char* pszSkip)
     }
     return false;
 }
+
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 14
+#pragma GCC diagnostic pop
+#endif
 
 
 void CDBEnv::Flush(bool fShutdown)
