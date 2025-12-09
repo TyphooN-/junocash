@@ -46,7 +46,8 @@ bench_bench_bitcoin_LDADD = \
   $(LIBBITCOIN_CONSENSUS) \
   $(LIBBITCOIN_SCRIPT) \
   $(LIBZCASH) \
-  $(LIBBITCOIN_UTIL)
+  $(LIBBITCOIN_UTIL) \
+  $(LIBRUSTZCASH)
 
 if ENABLE_ZMQ
 bench_bench_bitcoin_LDADD += $(LIBBITCOIN_ZMQ) $(ZMQ_LIBS)

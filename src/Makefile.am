@@ -757,7 +757,8 @@ junocashd_LDADD = \
   $(LIBBITCOIN_CONSENSUS) \
   $(LIBBITCOIN_SCRIPT) \
   $(LIBZCASH) \
-  $(LIBBITCOIN_UTIL)
+  $(LIBBITCOIN_UTIL) \
+  $(LIBRUSTZCASH)
 
 junocashd_LDADD += \
   $(BOOST_LIBS) \
@@ -796,6 +797,7 @@ junocash_cli_LDADD = \
   $(LIBBITCOIN_CONSENSUS) \
   $(LIBZCASH) \
   $(LIBBITCOIN_UTIL) \
+  $(LIBRUSTZCASH) \
   $(LIBZCASH_LIBS)
 #
 
@@ -825,6 +827,7 @@ junocash_tx_LDADD = \
   $(LIBBITCOIN_SCRIPT) \
   $(LIBZCASH) \
   $(LIBBITCOIN_UTIL) \
+  $(LIBRUSTZCASH) \
   $(LIBZCASH_LIBS)
 
 junocash_tx_LDADD += $(BOOST_LIBS)
