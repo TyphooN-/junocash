@@ -35,8 +35,7 @@ $(package)_sha256_hash=6857cc24cbe326c0cd571e52872bffe95f64ab67a8c5032c04875a977
 define $(package)_stage_cmds
   mkdir -p $($(package)_staging_prefix_dir)/lib && \
   mv include/ $($(package)_staging_prefix_dir) && \
-  cp lib/libc++.a $($(package)_staging_prefix_dir)/lib && \
-  cp lib/libc++abi.a $($(package)_staging_prefix_dir)/lib
+  cp lib/libc++.a $($(package)_staging_prefix_dir)/lib
 endef
 endif
 
