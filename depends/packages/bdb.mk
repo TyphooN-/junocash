@@ -24,7 +24,7 @@ ifneq ($(host_os),darwin)
 $(package)_config_opts_aarch64=--disable-atomicsupport
 endif
 $(package)_cxxflags+=-std=c++17
-$(package)_cflags+=-Wno-deprecated-non-prototype
+$(package)_cflags+=-Wno-deprecated-non-prototype -Wno-incompatible-pointer-types -Wno-implicit-function-declaration
 
 $(package)_ldflags+=-static-libstdc++ -Wno-unused-command-line-argument
 ifeq ($(host_os),freebsd)
