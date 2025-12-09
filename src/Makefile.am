@@ -385,7 +385,6 @@ libbitcoin_server_a_SOURCES = \
   hw/dmi/DmiBoard.cpp \
   hw/dmi/DmiMemory.cpp \
   hw/dmi/DmiReader.cpp \
-  hw/dmi/DmiReader_unix.cpp \
   hw/dmi/DmiTools.cpp \
   miner.cpp \
   net.cpp \
@@ -452,6 +451,12 @@ libbitcoin_wallet_a_SOURCES = \
   wallet/walletdb.cpp \
   $(BITCOIN_CORE_H) \
   $(LIBZCASH_H)
+
+if TARGET_WINDOWS
+libbitcoin_server_a_SOURCES += hw/dmi/DmiReader_win.cpp
+else
+libbitcoin_server_a_SOURCES += hw/dmi/DmiReader_unix.cpp
+endif
 
 # crypto primitives library
 crypto_libbitcoin_crypto_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_CONFIG_INCLUDES)

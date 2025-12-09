@@ -393,6 +393,22 @@ static std::string GetCPUModel() {
         }
 
         return std::string(CPUBrandString);
+    #elif defined(__MINGW32__) || defined(__MINGW64__)
+        // MinGW uses Windows-style __cpuid(int[4], int)
+        int CPUInfo[4] = {-1};
+        char CPUBrandString[0x40];
+        __cpuid(CPUInfo, 0x80000000);
+        unsigned int nExIds = CPUInfo[0];
+
+        memset(CPUBrandString, 0, sizeof(CPUBrandString));
+
+        if (nExIds >= 0x80000004) {
+            __cpuid((int*)(CPUBrandString), 0x80000002);
+            __cpuid((int*)(CPUBrandString + 16), 0x80000003);
+            __cpuid((int*)(CPUBrandString + 32), 0x80000004);
+        }
+
+        return std::string(CPUBrandString);
     #else
         char brand[0x40];
         unsigned int brand_data[12];
