@@ -739,15 +739,17 @@ endif
 junocashd_LDADD = \
   $(LIBBITCOIN_SERVER) \
   $(LIBBITCOIN_WALLET) \
-  $(LIBBITCOIN_CONSENSUS) \
-  $(LIBBITCOIN_SCRIPT) \
-  $(LIBCXXBRIDGE) \
-  $(LIBZCASH) \
-  $(LIBBITCOIN_UTIL) \
-  $(LIBBITCOIN_COMMON) \
-  $(LIBRUSTZCASH) \
-  $(LIBBITCOIN_CRYPTO) \
-  $(LIBSECP256K1) \
+  -Wl,--start-group \
+    $(LIBBITCOIN_CONSENSUS) \
+    $(LIBBITCOIN_SCRIPT) \
+    $(LIBCXXBRIDGE) \
+    $(LIBZCASH) \
+    $(LIBBITCOIN_UTIL) \
+    $(LIBBITCOIN_COMMON) \
+    $(LIBRUSTZCASH) \
+    $(LIBBITCOIN_CRYPTO) \
+    $(LIBSECP256K1) \
+  -Wl,--end-group \
   $(LIBUNIVALUE) \
   $(LIBBITCOIN_ZMQ) \
   $(LIBLEVELDB) \
@@ -775,15 +777,17 @@ endif
 
 junocash_cli_LDADD = \
   $(LIBBITCOIN_CLI) \
-  $(LIBBITCOIN_CONSENSUS) \
-  $(LIBBITCOIN_SCRIPT) \
-  $(LIBCXXBRIDGE) \
-  $(LIBZCASH) \
-  $(LIBBITCOIN_UTIL) \
-  $(LIBBITCOIN_COMMON) \
-  $(LIBRUSTZCASH) \
-  $(LIBBITCOIN_CRYPTO) \
-  $(LIBSECP256K1) \
+  -Wl,--start-group \
+    $(LIBBITCOIN_CONSENSUS) \
+    $(LIBBITCOIN_SCRIPT) \
+    $(LIBCXXBRIDGE) \
+    $(LIBZCASH) \
+    $(LIBBITCOIN_UTIL) \
+    $(LIBBITCOIN_COMMON) \
+    $(LIBRUSTZCASH) \
+    $(LIBBITCOIN_CRYPTO) \
+    $(LIBSECP256K1) \
+  -Wl,--end-group \
   $(LIBUNIVALUE) \
   $(LIBZCASH_LIBS) \
   $(BOOST_LIBS) \
@@ -802,15 +806,17 @@ endif
 
 # FIXME: Is libzcash needed for junocash_tx?
 junocash_tx_LDADD = \
-  $(LIBBITCOIN_COMMON) \
-  $(LIBBITCOIN_CONSENSUS) \
-  $(LIBBITCOIN_SCRIPT) \
-  $(LIBCXXBRIDGE) \
-  $(LIBZCASH) \
-  $(LIBBITCOIN_UTIL) \
-  $(LIBRUSTZCASH) \
-  $(LIBBITCOIN_CRYPTO) \
-  $(LIBSECP256K1) \
+  -Wl,--start-group \
+    $(LIBBITCOIN_COMMON) \
+    $(LIBBITCOIN_CONSENSUS) \
+    $(LIBBITCOIN_SCRIPT) \
+    $(LIBCXXBRIDGE) \
+    $(LIBZCASH) \
+    $(LIBBITCOIN_UTIL) \
+    $(LIBRUSTZCASH) \
+    $(LIBBITCOIN_CRYPTO) \
+    $(LIBSECP256K1) \
+  -Wl,--end-group \
   $(LIBUNIVALUE) \
   $(LIBZCASH_LIBS)
 
