@@ -11,6 +11,11 @@ ifneq ($(host_os),darwin)
 $(package)_dependencies+=libcxx
 endif
 
+ifeq ($(host_os),mingw32)
+$(package)_dependencies+=libunwind
+endif
+
+
 define $(package)_set_vars
 $(package)_cxxflags+=-std=c++17
 $(package)_cxxflags_linux=-fPIC

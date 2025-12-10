@@ -10,6 +10,11 @@ ifneq ($(host_os),darwin)
 $(package)_dependencies+=libcxx
 endif
 
+ifeq ($(host_os),mingw32)
+$(package)_dependencies+=libunwind
+endif
+
+
 define $(package)_set_vars
 $(package)_config_opts_release=variant=release
 $(package)_config_opts_debug=variant=debug

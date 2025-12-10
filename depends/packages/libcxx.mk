@@ -27,15 +27,16 @@ endef
 else
 # For Windows cross-compilation, use the MSYS2 binaries.
 # Starting from LLVM 15.0.0, libc++abi is provided by libc++.
-$(package)_download_path=https://repo.msys2.org/mingw/x86_64
-$(package)_download_file=mingw-w64-x86_64-libc++-$($(package)_msys2_version)-any.pkg.tar.zst
-$(package)_file_name=mingw-w64-x86_64-libcxx-$($(package)_msys2_version)-any.pkg.tar.zst
-$(package)_sha256_hash=6857cc24cbe326c0cd571e52872bffe95f64ab67a8c5032c04875a9778fdece7
+$(package)_download_path=https://repo.msys2.org/mingw/ucrt64
+$(package)_download_file=mingw-w64-ucrt-x86_64-libc++-$($(package)_msys2_version)-any.pkg.tar.zst
+$(package)_file_name=mingw-w64-ucrt-x86_64-libcxx-$($(package)_msys2_version)-any.pkg.tar.zst
+$(package)_sha256_hash=ee56277cdc5fb341563592dc8ab713d78c626aa92a848fae06e8e9554499de8a
 
 define $(package)_stage_cmds
   mkdir -p $($(package)_staging_prefix_dir)/lib && \
   mv include/ $($(package)_staging_prefix_dir) && \
-  cp lib/libc++.a $($(package)_staging_prefix_dir)/lib
+  cp lib/libc++.a $($(package)_staging_prefix_dir)/lib && \
+  cp lib/libc++abi.a $($(package)_staging_prefix_dir)/lib
 endef
 endif
 

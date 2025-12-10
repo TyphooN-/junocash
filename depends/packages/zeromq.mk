@@ -9,6 +9,10 @@ ifneq ($(host_os),darwin)
 $(package)_dependencies=libcxx
 endif
 
+ifeq ($(host_os),mingw32)
+$(package)_dependencies+=libunwind
+endif
+
 define $(package)_set_vars
   $(package)_config_opts=--without-docs --disable-shared --disable-curve --disable-curve-keygen --disable-perf
   $(package)_config_opts += --without-libgssapi_krb5 --without-pgm --without-norm --without-vmci
