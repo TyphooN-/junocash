@@ -38,6 +38,7 @@ LIBBITCOIN_CRYPTO_SSE41=crypto/libbitcoin_crypto_sse41.a
 LIBBITCOIN_CRYPTO_AVX2=crypto/libbitcoin_crypto_avx2.a
 LIBCXXBRIDGE=libcxxbridge.a
 LIBRUSTZCASH=$(top_builddir)/target/$(RUST_TARGET)/release/librustzcash.la
+LIBRUSTZCASH_A=$(top_builddir)/target/$(RUST_TARGET)/release/librustzcash.a
 LIBSECP256K1=secp256k1/libsecp256k1.la
 LIBUNIVALUE=univalue/libunivalue.la
 LIBZCASH=libzcash.a
@@ -179,6 +180,12 @@ $(LIBRUSTZCASH): cargo-build-lib
 	$(AM_V_at)echo "dependency_libs=' $(LIBCXXBRIDGE) '" >>$@
 	$(AM_V_at)echo "installed=no" >>$@
 	$(AM_V_at)echo "shouldnotlink=no" >>$@
+
+$(LIBRUSTZCASH_A): cargo-build-lib
+
+$(LIBSECP256K1_A): $(LIBSECP256K1)
+
+$(LIBUNIVALUE_A): $(LIBUNIVALUE)
 
 $(LIBSECP256K1): $(wildcard secp256k1/src/*) $(wildcard secp256k1/include/*)
 	$(AM_V_at)$(MAKE) $(AM_MAKEFLAGS) -C $(@D) $(@F)
@@ -722,6 +729,10 @@ if GLIBC_BACK_COMPAT
 libbitcoin_util_a_SOURCES += compat/glibc_compat.cpp
 endif
 
+if TARGET_WINDOWS
+libbitcoin_util_a_SOURCES += compat/new_delete.cpp
+endif
+
 # cli: zcash-cli
 libbitcoin_cli_a_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
 libbitcoin_cli_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
@@ -737,22 +748,20 @@ nodist_libbitcoin_util_a_SOURCES = $(srcdir)/obj/build.h
 junocashd_SOURCES = bitcoind.cpp
 junocashd_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
 junocashd_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
-junocashd_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
 
-if TARGET_WINDOWS
-junocashd_SOURCES += bitcoind-res.rc
-endif
+LIBSECP256K1_A = secp256k1/.libs/libsecp256k1.a
+LIBUNIVALUE_A = univalue/.libs/libunivalue.a
 
-junocashd_LDADD = \
+JUNOCASHD_DEPS = \
   $(LIBBITCOIN_SERVER) \
   $(LIBBITCOIN_WALLET) \
   $(LIBBITCOIN_CONSENSUS) \
   $(LIBBITCOIN_SCRIPT) \
-  $(LIBCXXBRIDGE) \
-  $(LIBZCASH) \
-  $(LIBBITCOIN_UTIL) \
   $(LIBBITCOIN_COMMON) \
+  $(LIBZCASH) \
   $(LIBRUSTZCASH) \
+  $(LIBCXXBRIDGE) \
+  $(LIBBITCOIN_UTIL) \
   $(LIBBITCOIN_CRYPTO) \
   $(LIBSECP256K1) \
   $(LIBUNIVALUE) \
@@ -761,7 +770,37 @@ junocashd_LDADD = \
   $(LIBLEVELDB_SSE42) \
   $(LIBMEMENV)
 
-junocashd_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) -Wl,--start-group $(LIBBITCOIN_CONSENSUS) $(LIBBITCOIN_SCRIPT) $(LIBCXXBRIDGE) $(LIBZCASH) $(LIBBITCOIN_UTIL) $(LIBBITCOIN_COMMON) $(LIBRUSTZCASH) $(LIBBITCOIN_CRYPTO) $(LIBSECP256K1) -Wl,--end-group $(LIBBCRYPT) -Wl,--allow-multiple-definition
+JUNOCASHD_LIBS = \
+  $(LIBBITCOIN_SERVER) \
+  $(LIBBITCOIN_WALLET) \
+  $(LIBBITCOIN_CONSENSUS) \
+  $(LIBBITCOIN_SCRIPT) \
+  $(LIBBITCOIN_COMMON) \
+  $(LIBBITCOIN_UTIL) \
+  $(LIBZCASH) \
+  $(LIBCXXBRIDGE) \
+  $(LIBRUSTZCASH_A) \
+  $(LIBBITCOIN_CRYPTO) \
+  $(LIBSECP256K1_A) \
+  $(LIBUNIVALUE_A) \
+  $(LIBBITCOIN_COMMON) \
+  $(LIBBITCOIN_UTIL) \
+  $(LIBZCASH) \
+  $(LIBCXXBRIDGE) \
+  $(LIBRUSTZCASH_A) \
+  $(LIBBITCOIN_CRYPTO) \
+  $(LIBSECP256K1_A) \
+  $(LIBUNIVALUE_A) \
+  $(LIBBITCOIN_ZMQ) \
+  $(LIBLEVELDB) \
+  $(LIBLEVELDB_SSE42) \
+  $(LIBMEMENV)
+
+W_PREFIX = -Wl,
+
+junocashd_DEPENDENCIES = $(JUNOCASHD_DEPS)
+junocashd_LDADD = $(GROUPS_START) $(addprefix $(W_PREFIX),$(JUNOCASHD_LIBS)) $(GROUPS_END)
+junocashd_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) -Wl,--allow-multiple-definition $(LIBBCRYPT)
 
 junocashd_LDADD += \
   $(BOOST_LIBS) \
@@ -776,58 +815,97 @@ junocashd_LDADD += \
 junocash_cli_SOURCES = bitcoin-cli.cpp
 junocash_cli_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(EVENT_CFLAGS)
 junocash_cli_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
-junocash_cli_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
 
 if TARGET_WINDOWS
 junocash_cli_SOURCES += bitcoin-cli-res.rc
 endif
 
-junocash_cli_LDADD = \
+JUNOCASH_CLI_DEPS = \
   $(LIBBITCOIN_CLI) \
   $(LIBBITCOIN_CONSENSUS) \
   $(LIBBITCOIN_SCRIPT) \
-  $(LIBCXXBRIDGE) \
-  $(LIBZCASH) \
-  $(LIBBITCOIN_UTIL) \
   $(LIBBITCOIN_COMMON) \
+  $(LIBZCASH) \
   $(LIBRUSTZCASH) \
+  $(LIBCXXBRIDGE) \
+  $(LIBBITCOIN_UTIL) \
   $(LIBBITCOIN_CRYPTO) \
   $(LIBSECP256K1) \
-  $(LIBUNIVALUE) \
-  $(LIBZCASH_LIBS) \
-  $(BOOST_LIBS) \
-  $(EVENT_LIBS)
+  $(LIBUNIVALUE)
 
-junocash_cli_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) -Wl,--start-group $(LIBBITCOIN_CONSENSUS) $(LIBBITCOIN_SCRIPT) $(LIBCXXBRIDGE) $(LIBZCASH) $(LIBBITCOIN_UTIL) $(LIBBITCOIN_COMMON) $(LIBRUSTZCASH) $(LIBBITCOIN_CRYPTO) $(LIBSECP256K1) -Wl,--end-group $(LIBBCRYPT) -Wl,--allow-multiple-definition
+JUNOCASH_CLI_LIBS = \
+  $(LIBBITCOIN_CLI) \
+  $(LIBBITCOIN_CONSENSUS) \
+  $(LIBBITCOIN_SCRIPT) \
+  $(LIBBITCOIN_COMMON) \
+  $(LIBBITCOIN_UTIL) \
+  $(LIBZCASH) \
+  $(LIBCXXBRIDGE) \
+  $(LIBRUSTZCASH_A) \
+  $(LIBBITCOIN_CRYPTO) \
+  $(LIBSECP256K1_A) \
+  $(LIBUNIVALUE_A) \
+  $(LIBBITCOIN_COMMON) \
+  $(LIBBITCOIN_UTIL) \
+  $(LIBZCASH) \
+  $(LIBCXXBRIDGE) \
+  $(LIBRUSTZCASH_A) \
+  $(LIBBITCOIN_CRYPTO) \
+  $(LIBSECP256K1_A) \
+  $(LIBUNIVALUE_A)
+
+junocash_cli_DEPENDENCIES = $(JUNOCASH_CLI_DEPS)
+junocash_cli_LDADD = $(GROUPS_START) $(addprefix $(W_PREFIX),$(JUNOCASH_CLI_LIBS)) $(GROUPS_END) $(BOOST_LIBS) $(EVENT_LIBS) $(LIBZCASH_LIBS)
+junocash_cli_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) -Wl,--allow-multiple-definition $(LIBBCRYPT)
+
 #
 
 # zcash-tx binary #
 junocash_tx_SOURCES = bitcoin-tx.cpp
 junocash_tx_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
 junocash_tx_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
-junocash_tx_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
 
 if TARGET_WINDOWS
 junocash_tx_SOURCES += bitcoin-tx-res.rc
 endif
 
 # FIXME: Is libzcash needed for junocash_tx?
-junocash_tx_LDADD = \
+JUNOCASH_TX_DEPS = \
   $(LIBBITCOIN_COMMON) \
   $(LIBBITCOIN_CONSENSUS) \
   $(LIBBITCOIN_SCRIPT) \
-  $(LIBCXXBRIDGE) \
   $(LIBZCASH) \
-  $(LIBBITCOIN_UTIL) \
   $(LIBRUSTZCASH) \
+  $(LIBCXXBRIDGE) \
+  $(LIBBITCOIN_UTIL) \
   $(LIBBITCOIN_CRYPTO) \
   $(LIBSECP256K1) \
-  $(LIBUNIVALUE) \
-  $(LIBZCASH_LIBS)
+  $(LIBUNIVALUE)
 
-junocash_tx_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) -Wl,--start-group $(LIBBITCOIN_COMMON) $(LIBBITCOIN_CONSENSUS) $(LIBBITCOIN_SCRIPT) $(LIBCXXBRIDGE) $(LIBZCASH) $(LIBBITCOIN_UTIL) $(LIBRUSTZCASH) $(LIBBITCOIN_CRYPTO) $(LIBSECP256K1) -Wl,--end-group $(LIBBCRYPT) -Wl,--allow-multiple-definition
+JUNOCASH_TX_LIBS = \
+  $(LIBBITCOIN_COMMON) \
+  $(LIBBITCOIN_CONSENSUS) \
+  $(LIBBITCOIN_SCRIPT) \
+  $(LIBBITCOIN_UTIL) \
+  $(LIBZCASH) \
+  $(LIBCXXBRIDGE) \
+  $(LIBRUSTZCASH_A) \
+  $(LIBBITCOIN_CRYPTO) \
+  $(LIBSECP256K1_A) \
+  $(LIBUNIVALUE_A) \
+  $(LIBBITCOIN_COMMON) \
+  $(LIBBITCOIN_UTIL) \
+  $(LIBZCASH) \
+  $(LIBCXXBRIDGE) \
+  $(LIBRUSTZCASH_A) \
+  $(LIBBITCOIN_CRYPTO) \
+  $(LIBSECP256K1_A) \
+  $(LIBUNIVALUE_A)
 
-junocash_tx_LDADD += $(BOOST_LIBS)
+junocash_tx_DEPENDENCIES = $(JUNOCASH_TX_DEPS)
+junocash_tx_LDADD = $(GROUPS_START) $(addprefix $(W_PREFIX),$(JUNOCASH_TX_LIBS)) $(GROUPS_END) $(BOOST_LIBS) $(LIBZCASH_LIBS)
+junocash_tx_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) -Wl,--allow-multiple-definition $(LIBBCRYPT)
+
 #
 
 # zcash protocol primitives #

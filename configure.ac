@@ -579,6 +579,7 @@ case $host in
      dnl -static is interpreted by libtool, where it has a different meaning.
      dnl In libtool-speak, it's -all-static.
      AX_CHECK_LINK_FLAG([[-static]],[LIBTOOL_APP_LDFLAGS="$LIBTOOL_APP_LDFLAGS -all-static"])
+     AX_CHECK_LINK_FLAG([[-all-static]],[LIBTOOL_APP_LDFLAGS="$LIBTOOL_APP_LDFLAGS -all-static"])
 
      AC_PATH_PROG([MAKENSIS], [makensis], none)
      if test x$MAKENSIS = xnone; then
@@ -1307,7 +1308,34 @@ AC_SUBST(HAVE_O_CLOEXEC)
 AC_SUBST(HAVE_BUILTIN_PREFETCH)
 AC_SUBST(HAVE_MM_PREFETCH)
 AC_SUBST(HAVE_STRONG_GETAUXVAL)
+case $host in
+  *darwin*)
+    GROUPS_START=""
+    GROUPS_END=""
+    ;;
+  *)
+    GROUPS_START="-Wl,--start-group"
+    GROUPS_END="-Wl,--end-group"
+    ;;
+esac
+AC_SUBST(GROUPS_START)
+AC_SUBST(GROUPS_END)
+
 AC_SUBST(HAVE_WEAK_GETAUXVAL)
+
+case $host in
+  *darwin*)
+    GROUPS_START=""
+    GROUPS_END=""
+    ;;
+  *)
+    GROUPS_START="-Wl,--start-group"
+    GROUPS_END="-Wl,--end-group"
+    ;;
+esac
+AC_SUBST(GROUPS_START)
+AC_SUBST(GROUPS_END)
+
 AC_CONFIG_FILES([Makefile src/Makefile doc/man/Makefile src/test/buildenv.py])
 AC_CONFIG_FILES([qa/pull-tester/tests_config.ini],[chmod +x qa/pull-tester/tests_config.ini])
 AC_CONFIG_LINKS([qa/pull-tester/rpc-tests.py:qa/pull-tester/rpc-tests.py])

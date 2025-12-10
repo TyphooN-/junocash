@@ -26,34 +26,11 @@ bench_bench_bitcoin_SOURCES = \
 
 bench_bench_bitcoin_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(EVENT_CLFAGS) $(EVENT_PTHREADS_CFLAGS) -I$(builddir)/bench/
 bench_bench_bitcoin_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
-bench_bench_bitcoin_LDADD = \
-  $(LIBBITCOIN_SERVER) \
-  $(LIBBITCOIN_CONSENSUS) \
-  $(LIBBITCOIN_SCRIPT) \
-  $(LIBCXXBRIDGE) \
-  $(LIBZCASH) \
-  $(LIBBITCOIN_UTIL) \
-  $(LIBBITCOIN_COMMON) \
-  $(LIBRUSTZCASH) \
-  $(LIBBITCOIN_CRYPTO) \
-  $(LIBSECP256K1) \
-  $(LIBUNIVALUE) \
-  $(LIBLEVELDB) \
-  $(LIBLEVELDB_SSE42) \
-  $(LIBMEMENV)
+bench_bench_bitcoin_LDADD = $(GROUPS_START) $(addprefix $(W_PREFIX),$(JUNOCASHD_LIBS)) $(GROUPS_END)
+bench_bench_bitcoin_DEPENDENCIES = $(JUNOCASHD_LIBS)
 
-bench_bench_bitcoin_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) -Wl,--start-group $(LIBBITCOIN_CONSENSUS) $(LIBBITCOIN_SCRIPT) $(LIBCXXBRIDGE) $(LIBZCASH) $(LIBBITCOIN_UTIL) $(LIBBITCOIN_COMMON) $(LIBRUSTZCASH) $(LIBBITCOIN_CRYPTO) $(LIBSECP256K1) -Wl,--end-group $(LIBBCRYPT) -Wl,--allow-multiple-definition
-
-if ENABLE_ZMQ
-bench_bench_bitcoin_LDADD += $(LIBBITCOIN_ZMQ) $(ZMQ_LIBS)
-endif
-
-if ENABLE_WALLET
-bench_bench_bitcoin_LDADD += $(LIBBITCOIN_WALLET)
-endif
-
-bench_bench_bitcoin_LDADD += $(BOOST_LIBS) $(BDB_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(LIBZCASH_LIBS)
-bench_bench_bitcoin_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
+bench_bench_bitcoin_LDADD += $(BOOST_LIBS) $(BDB_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS) $(ZMQ_LIBS) $(LIBZCASH_LIBS)
+bench_bench_bitcoin_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS) -Wl,--allow-multiple-definition $(LIBBCRYPT)
 
 CLEAN_BITCOIN_BENCH = bench/*.gcda bench/*.gcno
 
