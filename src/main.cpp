@@ -3326,25 +3326,17 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 
     OrchardMerkleFrontier orchard_tree;
     if (pindex->pprev && consensusParams.NetworkUpgradeActive(pindex->pprev->nHeight, Consensus::UPGRADE_NU5)) {
-        // Get the anchor from the view (coins database) - this is the source of truth
+        // Verify that the view's current state corresponds to the previous block.
         uint256 viewBestAnchor = view.GetBestAnchor(ORCHARD);
+        assert(pindex->pprev->hashFinalOrchardRoot == viewBestAnchor);
+        // We only call ConnectBlock on top of the active chain's tip.
+        assert(!pindex->pprev->hashFinalOrchardRoot.IsNull());
 
-        // Juno Cash: During rescan/reindex, the block index may not have hashFinalOrchardRoot
-        // set properly. Use the view's anchor as the source of truth and update the block
-        // index if needed.
-        if (pindex->pprev->hashFinalOrchardRoot.IsNull() && !viewBestAnchor.IsNull()) {
-            LogPrintf("ConnectBlock height %d: Updating pprev->hashFinalOrchardRoot from view: %s\n",
-                      pindex->nHeight, viewBestAnchor.ToString());
-            pindex->pprev->hashFinalOrchardRoot = viewBestAnchor;
-        } else if (pindex->pprev->hashFinalOrchardRoot != viewBestAnchor) {
-            // Log mismatch but use view's anchor - it's from the validated coins database
-            LogPrintf("ConnectBlock height %d: Orchard anchor mismatch - pprev=%s, view=%s, using view\n",
-                      pindex->nHeight, pindex->pprev->hashFinalOrchardRoot.ToString(), viewBestAnchor.ToString());
-        }
-
-        assert(view.GetOrchardAnchorAt(viewBestAnchor, orchard_tree));
+        assert(view.GetOrchardAnchorAt(pindex->pprev->hashFinalOrchardRoot, orchard_tree));
     } else {
-        // Before NU5 activation, Orchard root should be null or empty
+        if (pindex->pprev) {
+            assert(pindex->pprev->hashFinalOrchardRoot.IsNull());
+        }
         assert(view.GetOrchardAnchorAt(OrchardMerkleFrontier::empty_root(), orchard_tree));
     }
 
