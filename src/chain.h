@@ -19,18 +19,19 @@
 
 #include <rust/metrics.h>
 
-// Zcash version constants - Juno Cash always writes data in latest format
-// (these are historical Zcash versions, kept for reference)
-static const int SPROUT_VALUE_VERSION = 1001400;
-static const int SAPLING_VALUE_VERSION = 1010100;
-static const int CHAIN_HISTORY_ROOT_VERSION = 2010200;
-static const int NU5_DATA_VERSION = 4050000;
-static const int TRANSPARENT_VALUE_VERSION = 5040026;
-static const int NU6_DATA_VERSION = 5100025;
+// Juno Cash: Always write all block index data in latest format.
+// Set all version thresholds to 0 so version checks always pass.
+// (Original Zcash values were much higher than Juno's CLIENT_VERSION,
+// causing NU5/NU6 data like hashFinalOrchardRoot to never be persisted)
+static const int SPROUT_VALUE_VERSION = 0;
+static const int SAPLING_VALUE_VERSION = 0;
+static const int CHAIN_HISTORY_ROOT_VERSION = 0;
+static const int NU5_DATA_VERSION = 0;
+static const int TRANSPARENT_VALUE_VERSION = 0;
+static const int NU6_DATA_VERSION = 0;
 // Juno Cash: Always persist nCachedBranchId for all validated blocks,
 // not just activation blocks, to prevent chain rewinding on restart
-// Note: Version 90551 is 0.9.5 build 51 (current is 0.9.5 build 50)
-static const int BRANCH_ID_ALWAYS_VERSION = 90551;
+static const int BRANCH_ID_ALWAYS_VERSION = 0;
 
 /**
  * Maximum amount of time that a block timestamp is allowed to be ahead of the
