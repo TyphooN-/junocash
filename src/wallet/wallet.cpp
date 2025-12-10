@@ -4651,11 +4651,14 @@ std::optional<int> CWallet::ScanForWalletTransactions(
                     throw std::runtime_error("CWallet::ScanForWalletTransactions(): Orchard wallet is out of sync. Please restart your node with -rescan.");
                 }
             }
-        } else if (isInitScan && pindexStart->nHeight < nu5_height) {
-            // If it's the initial scan and we're starting below the nu5 activation
-            // height, we're effectively rescanning from genesis and so it's safe
-            // to update the note commitment tree as we progress.
+        } else if (isInitScan && nu5_height.has_value()) {
+            // Juno Cash: NU5 is always active from genesis (height 1), so the original
+            // condition (pindexStart->nHeight < nu5_height) would almost never be true.
+            // If there's no Orchard checkpoint and it's an init scan, we need to build
+            // the commitment tree from scratch, so always enable updates.
+            // This is safe because we're rescanning the entire chain.
             performOrchardWalletUpdates = true;
+            LogPrintf("CWallet::ScanForWalletTransactions(): No Orchard checkpoint, enabling Orchard wallet updates for init scan\n");
         }
 
         // Create a rescan-specific batch scanner for the wallet.
