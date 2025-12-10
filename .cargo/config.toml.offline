@@ -1,0 +1,16 @@
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
+
+# Note: These paths are relative and work when Cargo is run from the repo root.
+# The Makefile.am also sets CARGO_TARGET_*_LINKER env vars as a fallback.
+[target.aarch64-apple-darwin]
+linker = "depends/aarch64-apple-darwin/native/bin/aarch64-apple-darwin-cc"
+
+[target.x86_64-apple-darwin]
+linker = "depends/x86_64-apple-darwin18/native/bin/x86_64-apple-darwin18-cc"
+
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+# The directory for this source is set to RUST_VENDORED_SOURCES by src/Makefile.am

@@ -1,0 +1,74 @@
+package=boost
+$(package)_version=1_83_0
+$(package)_download_path=https://boostorg.jfrog.io/artifactory/main/release/$(subst _,.,$($(package)_version))/source/
+$(package)_file_name=boost_$($(package)_version).tar.bz2
+$(package)_sha256_hash=6478edfe2f3305127cffe8caf73ea0176c53769f4bf1585be237eb30798c3b8e
+$(package)_dependencies=native_b2
+$(package)_patches=6753-signals2-function-fix.patch
+
+ifneq ($(host_os),darwin)
+$(package)_dependencies+=libcxx
+endif
+
+ifeq ($(host_os),mingw32)
+$(package)_dependencies+=libunwind
+endif
+
+
+define $(package)_set_vars
+$(package)_config_opts_release=variant=release
+$(package)_config_opts_debug=variant=debug
+$(package)_config_opts=--layout=system --user-config=user-config.jam
+$(package)_config_opts+=threading=multi link=static -sNO_COMPRESSION=1
+$(package)_config_opts_linux=target-os=linux threadapi=pthread runtime-link=shared
+$(package)_config_opts_freebsd=cxxflags=-fPIC
+$(package)_config_opts_darwin=target-os=darwin runtime-link=shared
+$(package)_config_opts_mingw32=target-os=windows binary-format=pe threadapi=win32 runtime-link=static
+$(package)_config_opts_x86_64=architecture=x86 address-model=64
+$(package)_config_opts_i686=architecture=x86 address-model=32
+$(package)_config_opts_aarch64=address-model=64
+$(package)_config_opts_armv7a=address-model=32
+$(package)_config_libraries=chrono,filesystem,program_options,system,thread,test
+$(package)_cxxflags+=-std=c++17 -fvisibility=hidden
+$(package)_cxxflags_linux=-fPIC
+$(package)_cxxflags_freebsd=-fPIC
+
+# Determine toolset based on compiler
+$(package)_toolset:=$(if $(findstring clang,$($(package)_cxx)),clang,gcc)
+
+ifeq ($(host_os),freebsd)
+  $(package)_ldflags+=-static-libstdc++ -lcxxrt
+else ifeq ($(host_os),mingw32)
+  $(package)_ldflags+=-static-libstdc++
+else
+  $(package)_ldflags+=-static-libstdc++ -lc++abi
+endif
+
+endef
+
+define $(package)_preprocess_cmds
+  patch -p1 < $($(package)_patch_dir)/6753-signals2-function-fix.patch && \
+  echo "using $($(package)_toolset) : : $($(package)_cxx) : <cflags>\"$($(package)_cflags)\" <cxxflags>\"$($(package)_cxxflags)\" <compileflags>\"$($(package)_cppflags)\" <linkflags>\"$($(package)_ldflags)\" <archiver>\"$($(package)_ar)\" <striper>\"$(host_STRIP)\"  <ranlib>\"$(host_RANLIB)\" <rc>\"$(host_WINDRES)\" : ;" > user-config.jam \
+  $(if $(HOST_PYTHON), && echo "using python : $(PYTHON_VERSION) : $(HOST_PYTHON) : $(dir $(HOST_PYTHON))include/python$(PYTHON_VERSION) : $(dir $(HOST_PYTHON))lib/python$(PYTHON_VERSION) : <address-model>$(HOST_ARCH) : ;" >> user-config.jam)
+endef
+
+define $(package)_config_cmds
+  ./bootstrap.sh --without-icu --with-libraries=$($(package)_config_libraries) --with-toolset=$($(package)_toolset) --with-bjam=b2 --libdir=lib
+endef
+
+define $(package)_build_cmds
+  b2 -d2 -j2 -d1 --prefix=$($(package)_staging_prefix_dir) $($(package)_config_opts) toolset=$($(package)_toolset) stage
+endef
+
+define $(package)_stage_cmds
+  b2 -d0 -j4 --prefix=$($(package)_staging_prefix_dir) $($(package)_config_opts) toolset=$($(package)_toolset) install
+endef
+
+# Boost uses the MSVC convention of libboost_foo.lib as the naming pattern when
+# compiling for Windows, even though we use MinGW which follows the libfoo.a
+# convention. This causes issues with lld, so we rename all .lib files to .a.
+ifeq ($(host_os),mingw32)
+define $(package)_postprocess_cmds
+  if ls lib/*.lib >/dev/null 2>&1; then for f in lib/*.lib; do mv -- "$$$$f" "$$$${f%.lib}.a"; done; fi
+endef
+endif

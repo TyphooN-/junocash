@@ -1,0 +1,17 @@
+--- a/cctools/Makefile.am
++++ b/cctools/Makefile.am
+@@ -1,4 +1,4 @@
+-SUBDIRS=libstuff libmacho ar as misc otool efitools ld64 man
++SUBDIRS=libstuff libmacho ar as misc efitools ld64 man
+
+ ACLOCAL_AMFLAGS = -I m4
+
+--- a/cctools/configure.ac
++++ b/cctools/configure.ac
+@@ -503,7 +503,6 @@ AC_CONFIG_FILES([as/ppc64/Makefile])
+ AC_CONFIG_FILES([man/Makefile])
+ AC_CONFIG_FILES([misc/Makefile])
+-AC_CONFIG_FILES([otool/Makefile])
+ AC_CONFIG_FILES([efitools/Makefile])
+ AC_CONFIG_FILES([ld64/Makefile])
+ AC_CONFIG_FILES([ld64/doc/man/Makefile])
