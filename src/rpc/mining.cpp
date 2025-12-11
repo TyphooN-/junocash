@@ -1101,6 +1101,188 @@ UniValue getblocksubsidy(const UniValue& params, bool fHelp)
     return result;
 }
 
+UniValue getminerdata(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() != 0)
+        throw runtime_error(
+            "getminerdata\n"
+            "\nReturns essential blockchain state for p2pool mining.\n"
+            "This is a lightweight alternative to getblocktemplate for p2pool implementations.\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"version\" : n,                  (numeric) The block version\n"
+            "  \"height\" : n,                   (numeric) The next block height\n"
+            "  \"prevhash\" : \"xxxx\",          (string) The hash of the current tip\n"
+            "  \"randomxseedheight\" : n,        (numeric) The block height whose hash is used as RandomX seed\n"
+            "  \"randomxseedhash\" : \"xxxx\",   (string) The RandomX seed hash\n"
+            "  \"bits\" : \"xxxx\",              (string) The target difficulty bits\n"
+            "  \"difficulty\" : x.xxx,           (numeric) The difficulty\n"
+            "  \"mediantime\" : n,               (numeric) Median time past of previous blocks\n"
+            "  \"blockcommitmentshash\" : \"x\", (string) Block commitments hash (NU5+)\n"
+            "  \"tx_backlog\" : [               (array) Transaction pool backlog\n"
+            "    {\n"
+            "      \"txid\" : \"xxxx\",          (string) Transaction hash\n"
+            "      \"size\" : n,                 (numeric) Transaction size in bytes\n"
+            "      \"fee\" : n                   (numeric) Transaction fee in " + MINOR_CURRENCY_UNIT + "\n"
+            "    },\n"
+            "    ...\n"
+            "  ]\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("getminerdata", "")
+            + HelpExampleRpc("getminerdata", "")
+        );
+
+    LOCK(cs_main);
+
+    CBlockIndex* pindexPrev = chainActive.Tip();
+    if (!pindexPrev)
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "No blockchain tip available");
+
+    const Consensus::Params& consensusParams = Params().GetConsensus();
+
+    UniValue result(UniValue::VOBJ);
+
+    // Block version for next block
+    result.pushKV("version", ComputeBlockVersion(pindexPrev, consensusParams));
+
+    // Next block height
+    int nHeight = pindexPrev->nHeight + 1;
+    result.pushKV("height", nHeight);
+
+    // Previous block hash
+    result.pushKV("prevhash", pindexPrev->GetBlockHash().GetHex());
+
+    // RandomX seed information
+    uint64_t seedHeight = RandomX_SeedHeight(nHeight);
+    result.pushKV("randomxseedheight", (int64_t)seedHeight);
+
+    uint256 seedHash;
+    if (seedHeight == 0) {
+        // Genesis epoch - use genesis seed (0x08...)
+        seedHash.SetNull();
+        *seedHash.begin() = 0x08;
+    } else {
+        CBlockIndex* pindexSeed = chainActive[seedHeight];
+        if (!pindexSeed)
+            throw JSONRPCError(RPC_INTERNAL_ERROR, "Could not find seed block");
+        seedHash = pindexSeed->GetBlockHash();
+    }
+    result.pushKV("randomxseedhash", seedHash.GetHex());
+
+    // Difficulty target (bits)
+    unsigned int nBits = GetNextWorkRequired(pindexPrev, nullptr, consensusParams);
+    result.pushKV("bits", strprintf("%08x", nBits));
+    result.pushKV("difficulty", GetDifficulty(pindexPrev));
+
+    // Median time past
+    result.pushKV("mediantime", (int64_t)pindexPrev->GetMedianTimePast());
+
+    // Block commitments (for NU5+)
+    if (consensusParams.NetworkUpgradeActive(nHeight, Consensus::UPGRADE_NU5)) {
+        // For p2pool, we return null as they need to compute this based on their transactions
+        result.pushKV("blockcommitmentshash", "null");
+    }
+
+    // Transaction backlog from mempool
+    UniValue txBacklog(UniValue::VARR);
+    {
+        LOCK(mempool.cs);
+        for (CTxMemPool::indexed_transaction_set::const_iterator mi = mempool.mapTx.begin();
+             mi != mempool.mapTx.end(); ++mi)
+        {
+            const CTransaction& tx = mi->GetTx();
+            UniValue txInfo(UniValue::VOBJ);
+            txInfo.pushKV("txid", tx.GetHash().GetHex());
+            txInfo.pushKV("size", (int)mi->GetTxSize());
+            txInfo.pushKV("fee", ValueFromAmount(mi->GetFee()));
+            txBacklog.push_back(txInfo);
+        }
+    }
+    result.pushKV("tx_backlog", txBacklog);
+
+    return result;
+}
+
+UniValue calc_pow(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 2)
+        throw runtime_error(
+            "calc_pow \"hexdata\" ( \"seedhash\" )\n"
+            "\nCalculates the RandomX proof-of-work hash for a given block.\n"
+            "This allows external miners/pools to delegate RandomX hashing to the daemon.\n"
+            "\nArguments:\n"
+            "1. \"hexdata\"      (string, required) The hex-encoded block header or full block data\n"
+            "2. \"seedhash\"     (string, optional) The RandomX seed hash (auto-detected from block height if not provided)\n"
+            "\nResult:\n"
+            "\"hash\"            (string) The RandomX proof-of-work hash in hex\n"
+            "\nExamples:\n"
+            + HelpExampleCli("calc_pow", "\"hexdata\"")
+            + HelpExampleRpc("calc_pow", "\"hexdata\", \"seedhash\"")
+        );
+
+#ifndef ENABLE_MINING
+    throw JSONRPCError(RPC_METHOD_NOT_FOUND, "Mining support not compiled");
+#else
+
+    // Parse hex block data
+    std::vector<unsigned char> blockData = ParseHex(params[0].get_str());
+    if (blockData.size() < 140) {
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR,
+            "Block data too small (need at least 140 bytes for header)");
+    }
+
+    // Parse seed hash if provided
+    uint256 seedHash;
+    if (params.size() > 1 && !params[1].isNull()) {
+        seedHash.SetHex(params[1].get_str());
+    } else {
+        // Try to auto-detect from block if it's a full block
+        CBlock block;
+        CDataStream ssBlock(blockData, SER_NETWORK, PROTOCOL_VERSION);
+        try {
+            ssBlock >> block;
+
+            // Find the block height from the chain to determine seed
+            LOCK(cs_main);
+            BlockMap::iterator mi = mapBlockIndex.find(block.hashPrevBlock);
+            if (mi != mapBlockIndex.end()) {
+                int nHeight = mi->second->nHeight + 1;
+                uint64_t seedHeight = RandomX_SeedHeight(nHeight);
+
+                if (seedHeight == 0) {
+                    seedHash.SetNull();
+                    *seedHash.begin() = 0x08;
+                } else {
+                    CBlockIndex* pindexSeed = chainActive[seedHeight];
+                    if (pindexSeed) {
+                        seedHash = pindexSeed->GetBlockHash();
+                    }
+                }
+            }
+        } catch (...) {
+            // If we can't parse as full block, user must provide seed hash
+            if (seedHash.IsNull()) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER,
+                    "Could not auto-detect seed hash. Please provide it as second parameter.");
+            }
+        }
+    }
+
+    // Ensure RandomX is initialized
+    RandomX_Init(GetBoolArg("-randomxfastmode", false));
+
+    // Set the seed hash for RandomX
+    RandomX_SetMainSeedHash(seedHash.begin(), 32);
+
+    // Calculate the hash
+    uint256 powHash;
+    RandomX_CalculateHash(blockData.data(), blockData.size(), powHash.begin());
+
+    return powHash.GetHex();
+#endif
+}
+
 static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafeMode
   //  --------------------- ------------------------  -----------------------  ----------
@@ -1112,6 +1294,8 @@ static const CRPCCommand commands[] =
     { "mining",             "getblocktemplate",       &getblocktemplate,       true  },
     { "mining",             "submitblock",            &submitblock,            true  },
     { "mining",             "getblocksubsidy",        &getblocksubsidy,        true  },
+    { "mining",             "getminerdata",           &getminerdata,           true  },
+    { "mining",             "calc_pow",               &calc_pow,               true  },
 
 #ifdef ENABLE_MINING
     { "generating",         "getgenerate",            &getgenerate,            true  },
