@@ -1283,6 +1283,215 @@ UniValue calc_pow(const UniValue& params, bool fHelp)
 #endif
 }
 
+// Helper function to calculate aux PoW slot for merge mining
+static uint32_t GetAuxSlot(const uint256& auxId, uint32_t nonce, uint32_t numChains)
+{
+    // Hash the aux chain ID with the nonce to determine slot
+    CHashWriter ss(SER_GETHASH, 0);
+    ss << auxId;
+    ss << nonce;
+    uint256 hash = ss.GetHash();
+
+    // Use first 4 bytes as slot number
+    uint32_t slot = ReadLE32(hash.begin()) % numChains;
+    return slot;
+}
+
+UniValue add_aux_pow(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() != 1)
+        throw runtime_error(
+            "add_aux_pow {\"blocktemplate_blob\":\"hex\",\"aux_pow\":[{\"id\":\"hex\",\"hash\":\"hex\"}...]}\n"
+            "\nAdds auxiliary proof-of-work data for merge mining.\n"
+            "Takes a block template and array of auxiliary chain block hashes,\n"
+            "computes a merkle tree, and embeds the merkle root in the coinbase.\n"
+            "\nThis enables mining multiple blockchains simultaneously with one hash.\n"
+            "\nArguments:\n"
+            "1. request             (object, required) A json object\n"
+            "     {\n"
+            "       \"blocktemplate_blob\": \"hex\",   (string, required) Hex-encoded block template from getblocktemplate\n"
+            "       \"aux_pow\": [                     (array, required) Auxiliary PoW data for merge-mined chains\n"
+            "         {\n"
+            "           \"id\": \"hex\",               (string, required) Auxiliary chain identifier (hash)\n"
+            "           \"hash\": \"hex\"              (string, required) Auxiliary chain block hash\n"
+            "         },\n"
+            "         ...\n"
+            "       ]\n"
+            "     }\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"blocktemplate_blob\" : \"hex\",       (string) Updated block template with merkle root\n"
+            "  \"blockhashing_blob\" : \"hex\",        (string) Block header for hashing\n"
+            "  \"merkle_root\" : \"hex\",              (string) Merkle root of aux PoW hashes\n"
+            "  \"merkle_tree_depth\" : n,              (numeric) Depth encoded with nonce (nonce | (depth << 16))\n"
+            "  \"aux_pow\" : [                        (array) Aux PoW data in slot order\n"
+            "    {\n"
+            "      \"id\" : \"hex\",                   (string) Chain ID\n"
+            "      \"hash\" : \"hex\"                  (string) Block hash\n"
+            "    },\n"
+            "    ...\n"
+            "  ]\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("add_aux_pow", "'{\"blocktemplate_blob\":\"...\",\"aux_pow\":[{\"id\":\"...\",\"hash\":\"...\"}]}'")
+            + HelpExampleRpc("add_aux_pow", "{\"blocktemplate_blob\":\"...\",\"aux_pow\":[{\"id\":\"...\",\"hash\":\"...\"}]}")
+        );
+
+    RPCTypeCheck(params, boost::assign::list_of(UniValue::VOBJ));
+
+    const UniValue& request = params[0].get_obj();
+
+    const UniValue& blocktemplate_blob = request["blocktemplate_blob"];
+    const UniValue& aux_pow_array = request["aux_pow"];
+
+    if (!blocktemplate_blob.isStr())
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "blocktemplate_blob must be a hex string");
+    if (!aux_pow_array.isArray() || aux_pow_array.size() == 0)
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "aux_pow must be a non-empty array");
+
+    // Parse block template
+    CBlock block;
+    if (!DecodeHexBlk(block, blocktemplate_blob.get_str()))
+        throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Failed to decode block template");
+
+    // Parse aux PoW entries
+    std::vector<std::pair<uint256, uint256>> auxPow;
+    for (size_t i = 0; i < aux_pow_array.size(); i++) {
+        const UniValue& entry = aux_pow_array[i].get_obj();
+        const UniValue& id = entry["id"];
+        const UniValue& hash = entry["hash"];
+
+        if (!id.isStr() || !hash.isStr())
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "aux_pow entries must have 'id' and 'hash' strings");
+
+        uint256 auxId, auxHash;
+        auxId.SetHex(id.get_str());
+        auxHash.SetHex(hash.get_str());
+        auxPow.push_back(std::make_pair(auxId, auxHash));
+    }
+
+    const uint32_t numChains = auxPow.size();
+
+    // Find a nonce that avoids slot collisions
+    const uint32_t maxNonce = 65535;
+    uint32_t nonce = 0;
+    std::vector<uint32_t> slots(numChains);
+    bool foundValidNonce = false;
+
+    for (nonce = 0; nonce <= maxNonce; nonce++) {
+        std::vector<bool> slotUsed(numChains, false);
+        bool collision = false;
+
+        for (size_t i = 0; i < numChains; i++) {
+            uint32_t slot = GetAuxSlot(auxPow[i].first, nonce, numChains);
+            if (slot >= numChains || slotUsed[slot]) {
+                collision = true;
+                break;
+            }
+            slotUsed[slot] = true;
+            slots[i] = slot;
+        }
+
+        if (!collision) {
+            foundValidNonce = true;
+            break;
+        }
+    }
+
+    if (!foundValidNonce)
+        throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to find valid nonce for aux PoW slot allocation");
+
+    // Build ordered aux PoW array (by slot)
+    std::vector<uint256> auxPowOrdered(numChains);
+    std::vector<std::pair<uint256, uint256>> auxPowOrderedPairs(numChains);
+    for (size_t i = 0; i < numChains; i++) {
+        auxPowOrdered[slots[i]] = auxPow[i].second;
+        auxPowOrderedPairs[slots[i]] = auxPow[i];
+    }
+
+    // Calculate merkle root
+    uint256 merkleRoot;
+    if (numChains == 1) {
+        merkleRoot = auxPowOrdered[0];
+    } else {
+        // Build merkle tree
+        std::vector<uint256> tree = auxPowOrdered;
+        size_t levelSize = numChains;
+
+        while (levelSize > 1) {
+            size_t nextLevelSize = (levelSize + 1) / 2;
+            for (size_t i = 0; i < nextLevelSize; i++) {
+                size_t left = i * 2;
+                size_t right = std::min(left + 1, levelSize - 1);
+
+                CHashWriter hasher(SER_GETHASH, 0);
+                hasher << tree[left];
+                if (left != right)
+                    hasher << tree[right];
+                else
+                    hasher << tree[left];  // Duplicate last hash if odd number
+
+                tree[i] = hasher.GetHash();
+            }
+            levelSize = nextLevelSize;
+        }
+        merkleRoot = tree[0];
+    }
+
+    // Calculate depth (log2 of numChains, rounded up)
+    uint32_t depth = 0;
+    uint32_t temp = numChains - 1;
+    while (temp > 0) {
+        depth++;
+        temp >>= 1;
+    }
+
+    // Encode merkle tree depth: (nonce | (depth << 16))
+    uint32_t merkleTreeDepth = nonce | (depth << 16);
+
+    // Add merkle root to coinbase scriptSig
+    // Format: <height> <OP_0> <merkle_root> <merkle_tree_depth>
+    CMutableTransaction mtx(block.vtx[0]);
+
+    // Rebuild scriptSig with merkle data
+    CScript newScriptSig;
+    newScriptSig << CScriptNum(chainActive.Height() + 1) << OP_0;
+    newScriptSig << std::vector<unsigned char>(merkleRoot.begin(), merkleRoot.end());
+    newScriptSig << merkleTreeDepth;
+
+    mtx.vin[0].scriptSig = newScriptSig;
+    block.vtx[0] = CTransaction(mtx);
+
+    // Recalculate block hashes
+    block.hashMerkleRoot = BlockMerkleRoot(block);
+
+    // Prepare response
+    UniValue result(UniValue::VOBJ);
+
+    CDataStream ssBlock(SER_NETWORK, PROTOCOL_VERSION);
+    ssBlock << block;
+    result.pushKV("blocktemplate_blob", HexStr(ssBlock.begin(), ssBlock.end()));
+
+    // Block hashing blob (first 140 bytes for header)
+    std::string hashingBlob = HexStr(ssBlock.begin(), ssBlock.begin() + std::min((size_t)140, ssBlock.size()));
+    result.pushKV("blockhashing_blob", hashingBlob);
+
+    result.pushKV("merkle_root", merkleRoot.GetHex());
+    result.pushKV("merkle_tree_depth", (uint64_t)merkleTreeDepth);
+
+    // Return aux_pow in slot order
+    UniValue auxPowResult(UniValue::VARR);
+    for (size_t i = 0; i < numChains; i++) {
+        UniValue entry(UniValue::VOBJ);
+        entry.pushKV("id", auxPowOrderedPairs[i].first.GetHex());
+        entry.pushKV("hash", auxPowOrderedPairs[i].second.GetHex());
+        auxPowResult.push_back(entry);
+    }
+    result.pushKV("aux_pow", auxPowResult);
+
+    return result;
+}
+
 static const CRPCCommand commands[] =
 { //  category              name                      actor (function)         okSafeMode
   //  --------------------- ------------------------  -----------------------  ----------
@@ -1296,6 +1505,7 @@ static const CRPCCommand commands[] =
     { "mining",             "getblocksubsidy",        &getblocksubsidy,        true  },
     { "mining",             "getminerdata",           &getminerdata,           true  },
     { "mining",             "calc_pow",               &calc_pow,               true  },
+    { "mining",             "add_aux_pow",            &add_aux_pow,            true  },
 
 #ifdef ENABLE_MINING
     { "generating",         "getgenerate",            &getgenerate,            true  },
