@@ -1720,36 +1720,38 @@ int printMiningStatus(bool mining)
             nThreads = GetArg("-genproclimit", 1);
         }
 
-        // Line 1: Mining status, threads, donations, quit
-        std::string controls1 = strprintf("\e[1;37m[M]\e[0m Mining: \e[1;32mON\e[0m  \e[1;37m[T]\e[0m Threads: %d", nThreads);
-
-        int donationPct = getCurrentDonationPercentage();
-        if (donationPct > 0) {
-            controls1 += strprintf("  \e[1;37m[D]\e[0m Donations: \e[1;35mON (%d%%)\e[0m  \e[1;37m[P]\e[0m Change %%", donationPct);
-        } else {
-            controls1 += "  \e[1;37m[D]\e[0m Donations: \e[1;31mOFF\e[0m";
-        }
-
-        controls1 += "  \e[1;37m[Q]\e[0m Quit";
-        drawCentered(controls1);
+        // Line 1: Main Controls
+        std::string row1 = strprintf("\e[1;37m[M]\e[0m Mining: \e[1;32mON\e[0m  \e[1;37m[T]\e[0m Threads: %d  \e[1;37m[Q]\e[0m Quit", nThreads);
+        drawCentered(row1);
         lines++;
 
-        // Line 2: Mining mode toggles and benchmark
+        // Get statuses for Rows 2 & 3
         bool isFastMode = RandomX_IsFastMode();
         bool hugepagesInUse = RandomX_IsUsingHugepages();
         bool isLightMode = !isFastMode;
+        bool p2poolMode = !GetArg("-p2poolurl", "").empty() && !GetArg("-p2pooladdress", "").empty();
+        int donationPct = getCurrentDonationPercentage();
 
         std::string fastStatus = isFastMode ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
         std::string lightStatus = isLightMode ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
         std::string hugepagesStatus = hugepagesInUse ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
-
-        // Check P2Pool mode
-        bool p2poolMode = !GetArg("-p2poolurl", "").empty() && !GetArg("-p2pooladdress", "").empty();
         std::string p2poolStatus = p2poolMode ? "\e[1;36mON\e[0m" : "\e[1;31mOFF\e[0m";
 
-        std::string controls2 = strprintf("\e[1;37m[L]\e[0m Light Mode: %s  \e[1;37m[F]\e[0m Fast Mode: %s  \e[1;37m[H]\e[0m Hugepages: %s  \e[1;37m[O]\e[0m P2Pool: %s  \e[1;37m[B]\e[0m Benchmark",
-            lightStatus.c_str(), fastStatus.c_str(), hugepagesStatus.c_str(), p2poolStatus.c_str());
-        drawCentered(controls2);
+        // Line 2: RandomX Modes
+        std::string row2 = strprintf("\e[1;37m[L]\e[0m Light: %s  \e[1;37m[F]\e[0m Fast: %s  \e[1;37m[H]\e[0m Hugepages: %s",
+            lightStatus.c_str(), fastStatus.c_str(), hugepagesStatus.c_str());
+        drawCentered(row2);
+        lines++;
+
+        // Line 3: Features (P2Pool, Benchmark, Donations)
+        std::string row3 = strprintf("\e[1;37m[O]\e[0m P2Pool: %s  \e[1;37m[B]\e[0m Benchmark", p2poolStatus.c_str());
+        
+        if (donationPct > 0) {
+            row3 += strprintf("  \e[1;37m[D]\e[0m Donations: \e[1;35mON (%d%%)\e[0m  \e[1;37m[P]\e[0m Change %%", donationPct);
+        } else {
+            row3 += "  \e[1;37m[D]\e[0m Donations: \e[1;31mOFF\e[0m";
+        }
+        drawCentered(row3);
     } else {
         drawCentered("\e[1;37m[M]\e[0m Mining: \e[1;31mOFF\e[0m  \e[1;37m[Q]\e[0m Quit");
     }
