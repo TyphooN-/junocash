@@ -3025,8 +3025,6 @@ void ThreadShowMetricsScreen()
     int64_t nRefresh = GetArg("-metricsrefreshtime", isTTY ? 1 : 600);
 
     // Header is 6 lines: box top + 3 centered lines + box bottom + blank line
-    const int HEADER_LINES = 7;  // Position to start content (row 7, line after header)
-
     if (isScreen) {
 #ifdef WIN32
         enableVTMode();
@@ -3036,15 +3034,6 @@ void ThreadShowMetricsScreen()
             enableRawMode();
         }
 #endif
-
-        // Initial screen setup: clear and draw header once
-        std::cout << "\e[2J\e[H" << std::flush;  // Clear screen and move to home
-        drawBoxTop("");
-        drawCentered("Juno Cash", "\e[1;33m");
-        drawCentered("Private Money", "\e[1;36m");
-        drawCentered(FormatFullVersion() + " - " + WhichNetwork() + " - RandomX", "\e[0;37m");
-        drawBoxBottom();
-        std::cout << std::endl;
     }
 
     while (true) {
@@ -3079,8 +3068,16 @@ void ThreadShowMetricsScreen()
         }
 
         if (isScreen) {
-            // Move to position after header (row 7) and clear rest of screen
-            std::cout << "\e[" << HEADER_LINES << ";1H\e[J" << std::flush;
+            // Clear screen and move to home - redrawing everything ensures clean resize
+            std::cout << "\e[2J\e[H" << std::flush;
+
+            // Draw header every frame
+            drawBoxTop("");
+            drawCentered("Juno Cash", "\e[1;33m");
+            drawCentered("Private Money", "\e[1;36m");
+            drawCentered(FormatFullVersion() + " - " + WhichNetwork() + " - RandomX", "\e[0;37m");
+            drawBoxBottom();
+            std::cout << std::endl;
         }
 
         // Miner status
@@ -3166,7 +3163,7 @@ void ThreadShowMetricsScreen()
                 }
             }
 
-            MilliSleep(200);
+            MilliSleep(100);
         }
 
         // Screen will be redrawn from home position at start of next loop
