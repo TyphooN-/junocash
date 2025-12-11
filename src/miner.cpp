@@ -1064,7 +1064,8 @@ void static P2PoolMiner(const std::string& url, const std::string& address, int 
             }
 
             std::vector<unsigned char> headerBytes = ParseHex(tmpl->header_hex);
-            if (headerBytes.size() != 108) {
+            if (headerBytes.size() != 108 && headerBytes.size() != 140) {
+                 LogPrintf("P2PoolMiner: Invalid header size %d (expected 108 or 140)\n", headerBytes.size());
                  MilliSleep(1000);
                  boost::this_thread::interruption_point();
                  continue;

@@ -41,7 +41,7 @@ class MockP2PoolHandler(http.server.BaseHTTPRequestHandler):
         if method == "get_share_template":
             # Return a dummy template
             # Header must be 140 bytes hex
-            header = "04000000" + "00"*32 + "00"*32 + "00"*32 + "00000000" + "ffff0f1e" + "00"*32 + "00" # Dummy header
+            header = "04000000" + "00"*32 + "00"*32 + "00"*32 + "00000000" + "ffff0f1e" + "00"*32 # Dummy header
             # Pad to 140 bytes (280 hex chars)
             header = header.ljust(280, '0')
             
