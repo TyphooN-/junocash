@@ -1,5 +1,6 @@
 #include "p2pool_client.h"
 #include "support/events.h"
+#undef HTTP_OK
 #include "rpc/protocol.h"
 #include "util/system.h"
 #include "util/strencodings.h"

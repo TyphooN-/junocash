@@ -44,6 +44,10 @@
 
 using namespace std;
 
+static int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Params& params) {
+    return CBlockHeader::CURRENT_VERSION;
+}
+
 /**
  * Return average network hashes per second based on the last 'lookup' blocks,
  * or over the difficulty averaging window if 'lookup' is nonpositive.
@@ -1277,7 +1281,7 @@ UniValue calc_pow(const UniValue& params, bool fHelp)
 
     // Calculate the hash
     uint256 powHash;
-    RandomX_CalculateHash(blockData.data(), blockData.size(), powHash.begin());
+    RandomX_Hash(blockData.data(), blockData.size(), powHash.begin());
 
     return powHash.GetHex();
 #endif
