@@ -500,6 +500,7 @@ package_release() {
     cp "$REPO_ROOT/src/junocashd${EXE_EXT}" "$PKG_DIR/bin/" 2>/dev/null || true
     cp "$REPO_ROOT/src/junocash-cli${EXE_EXT}" "$PKG_DIR/bin/" 2>/dev/null || true
     cp "$REPO_ROOT/src/junocash-tx${EXE_EXT}" "$PKG_DIR/bin/" 2>/dev/null || true
+    cp "$REPO_ROOT/src/junocash-p2pool${EXE_EXT}" "$PKG_DIR/bin/" 2>/dev/null || true
     cp "$REPO_ROOT/target/release/junocashd-wallet-tool${EXE_EXT}" "$PKG_DIR/bin/" 2>/dev/null || true
 
     # Copy documentation
@@ -627,6 +628,7 @@ create_dmg() {
     cp "$REPO_ROOT/src/junocashd" "$PKG_DIR/bin/" 2>/dev/null || true
     cp "$REPO_ROOT/src/junocash-cli" "$PKG_DIR/bin/" 2>/dev/null || true
     cp "$REPO_ROOT/src/junocash-tx" "$PKG_DIR/bin/" 2>/dev/null || true
+    cp "$REPO_ROOT/src/junocash-p2pool" "$PKG_DIR/bin/" 2>/dev/null || true
     cp "$REPO_ROOT/target/release/junocashd-wallet-tool" "$PKG_DIR/bin/" 2>/dev/null || true
 
     # Copy documentation

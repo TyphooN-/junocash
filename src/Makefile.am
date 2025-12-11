@@ -948,3 +948,12 @@ endif
 if ENABLE_BENCH
 include Makefile.bench.include
 endif
+
+# P2Pool build
+all-local: p2pool-build
+
+p2pool-build:
+	@echo "Building P2Pool..."
+	cd p2pool && git submodule update --init --recursive
+	cd p2pool && mkdir -p build && cd build && cmake .. -DWITH_RANDOMX=OFF && $(MAKE)
+	cp p2pool/build/p2pool $(top_builddir)/src/junocash-p2pool

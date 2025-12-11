@@ -1,0 +1,3 @@
+[submodule "src/p2pool"]
+	path = src/p2pool
+	url = https://github.com/SChernykh/p2pool
