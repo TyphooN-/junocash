@@ -87,7 +87,6 @@ void ReadConfigFile(const std::string& confPath, std::map<std::string, std::stri
 fs::path GetSpecialFolderPath(int nFolder, bool fCreate = true);
 #endif
 fs::path GetProgramDir(); // Declare it here
-#endif
 void runCommand(const std::string& strCommand);
 const fs::path GetExportDir();
 

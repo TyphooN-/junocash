@@ -4,6 +4,7 @@
 
 #include "zcash/memo.h"
 
+#include <algorithm>
 #include <utf8cpp/utf8.h>
 
 namespace libzcash {
@@ -82,7 +83,7 @@ tl::expected<Memo::Contents, Memo::InterpretationError> Memo::Interpret() const
     // UTF-8-encoded text string.
     if (value_[0] <= 0xf4) {
         // Trim off trailing zeroes
-        auto end = std::find_if(value_.rbegin(), value_.rend(), [](auto v) { return v != 0; });
+        auto end = std::find_if(value_.rbegin(), value_.rend(), [](unsigned char v) { return v != 0; });
         std::string memoStr(value_.begin(), end.base());
         if (utf8::is_valid(memoStr)) {
             return {memoStr};

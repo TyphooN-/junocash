@@ -160,6 +160,7 @@ namespace {
             case UnsatisfiedShieldedReq::OrchardUnknownAnchor:
                 return REJECT_INVALID;
         }
+        return REJECT_INVALID;
     }
 
     std::string ShieldedReqRejectReason(UnsatisfiedShieldedReq shieldedReq)
@@ -172,6 +173,7 @@ namespace {
             case UnsatisfiedShieldedReq::OrchardDuplicateNullifier: return "bad-txns-orchard-duplicate-nullifier";
             case UnsatisfiedShieldedReq::OrchardUnknownAnchor:      return "bad-txns-orchard-unknown-anchor";
         }
+        return "bad-txns-shielded-req-unknown";
     }
 
     /** Abort with a message */
