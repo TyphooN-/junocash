@@ -602,6 +602,24 @@ fs::path GetSpecialFolderPath(int nFolder, bool fCreate)
 }
 #endif
 
+fs::path GetProgramDir()
+{
+#ifdef WIN32
+    TCHAR szPath[MAX_PATH];
+    if (GetModuleFileName(NULL, szPath, MAX_PATH) == 0) {
+        return fs::path();
+    }
+    return fs::path(szPath).parent_path();
+#else
+    char buf[PATH_MAX];
+    ssize_t count = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    if (count == -1) return fs::path();
+    buf[count] = '\0';
+    return fs::path(buf).parent_path();
+#endif
+}
+
+
 void runCommand(const std::string& strCommand)
 {
     int nErr = ::system(strCommand.c_str());

@@ -58,28 +58,17 @@ std::string GetP2PoolBinaryPath()
     if (!customPath.empty()) {
         return customPath;
     }
-
-    // Default: look in data directory first, then same directory as daemon
-    boost::filesystem::path dataDir = GetDataDir();
-    boost::filesystem::path binaryPath = dataDir / "junocash-p2pool";
-
-#ifdef WIN32
-    binaryPath = dataDir / "junocash-p2pool.exe";
-#endif
-
-    if (boost::filesystem::exists(binaryPath)) {
-        return binaryPath.string();
+    
+    // Check in the same directory as junocashd executable first
+    fs::path programDir = GetProgramDir();
+    fs::path p2pool_exe_path = programDir / "junocash-p2pool";
+    if (fs::exists(p2pool_exe_path)) {
+        return p2pool_exe_path.string();
     }
 
-    // Try same directory as junocashd executable
-    boost::filesystem::path programDir = boost::filesystem::current_path();
-    binaryPath = programDir / "junocash-p2pool";
-
-#ifdef WIN32
-    binaryPath = programDir / "junocash-p2pool.exe";
-#endif
-
-    return binaryPath.string();
+    // Fallback to data directory
+    fs::path dataDir = GetDataDir();
+    return (dataDir / "junocash-p2pool").string();
 }
 
 std::vector<std::string> P2PoolProcessManager::BuildP2PoolArgs(const P2PoolConfig& config) const
