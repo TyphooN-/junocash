@@ -3459,7 +3459,7 @@ void ThreadShowMetricsScreen()
                 }
             }
 
-            MilliSleep(100);
+            MilliSleep(200);
         }
 
         // Screen will be redrawn from home position at start of next loop
