@@ -394,6 +394,8 @@ libbitcoin_server_a_SOURCES = \
   hw/dmi/DmiTools.cpp \
   miner.cpp \
   net.cpp \
+  p2pool_client.cpp \
+  p2pool_client.h \
   noui.cpp \
   numa_helper.cpp \
   policy/policy.cpp \

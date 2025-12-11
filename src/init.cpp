@@ -502,6 +502,8 @@ std::string HelpMessage(HelpMessageMode mode)
     strUsage += HelpMessageOpt("-genproclimit=<n>", strprintf(_("Set the number of threads for coin generation if enabled (-1 = all cores, default: %d)"), DEFAULT_GENERATE_THREADS));
     strUsage += HelpMessageOpt("-equihashsolver=<name>", _("Specify the Equihash solver to be used if enabled (default: \"default\")"));
     strUsage += HelpMessageOpt("-mineraddress=<addr>", _("(NOT NECESSARY) Send mined coins to a specific transparent P2PKH address (t...). A new address is generated per block if not set. Use t_getminingaddress RPC to get an address."));
+    strUsage += HelpMessageOpt("-p2poolurl=<url>", _("URL of the P2Pool node (e.g. http://127.0.0.1:37889)"));
+    strUsage += HelpMessageOpt("-p2pooladdress=<addr>", _("Wallet address for P2Pool mining payout"));
     strUsage += HelpMessageOpt("-randomxfastmode", _("Use RandomX fast mode with 2GB dataset for ~2x mining speed (default: 0)"));
     strUsage += HelpMessageOpt("-randomxmsr", _("Enable MSR (Model Specific Register) optimizations for 10-15% hashrate improvement (default: 1, requires setup-msr-permissions.sh)"));
     strUsage += HelpMessageOpt("-randomxcacheqos", _("Enable L3 cache QoS allocation for mining threads, 2-5% additional improvement (default: 1, requires -randomxmsr=1)"));

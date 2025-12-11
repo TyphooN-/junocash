@@ -14,6 +14,7 @@
 #include "crypto/randomx_fix.h"
 #include "crypto/cpu_features.h"
 #include "numa_helper.h"
+#include "p2pool_client.h"
 #endif
 
 #include "amount.h"
@@ -1027,8 +1028,116 @@ static inline void IncrementNonce256_Fast(unsigned char* noncePtr) {
     ++nonce64[3];
 }
 
+void static P2PoolMiner(const std::string& url, const std::string& address, int thread_id, int total_threads)
+{
+    LogPrintf("P2PoolMiner started (thread %d/%d)\n", thread_id + 1, total_threads);
+    SetThreadPriority(THREAD_PRIORITY_LOWEST);
+    RenameThread("juno-p2pool");
+
+    NumaHelper& numa = NumaHelper::GetInstance();
+    int cpu_id = -1;
+    if (numa.IsNUMAAvailable()) {
+        cpu_id = numa.GetCPUForThread(thread_id, total_threads);
+        if (cpu_id >= 0 && numa.PinCurrentThread(cpu_id)) {
+            int node_id = numa.GetNodeForThread(thread_id, total_threads);
+            RandomX_SetCurrentNode(node_id);
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    }
+
+    bool randomxFastMode = GetBoolArg("-randomxfastmode", false);
+    RandomX_Init(randomxFastMode);
+
+    P2PoolClient client(url, address);
+    alignas(64) uint8_t hash_input[140];
+    uint8_t nonce[32];
+    
+    GetRandBytes(nonce, 32);
+
+    try {
+        while (true) {
+            auto tmpl = client.GetBlockTemplate();
+            if (!tmpl) {
+                MilliSleep(100);
+                boost::this_thread::interruption_point();
+                continue;
+            }
+
+            std::vector<unsigned char> headerBytes = ParseHex(tmpl->header_hex);
+            if (headerBytes.size() != 108) {
+                 MilliSleep(1000);
+                 boost::this_thread::interruption_point();
+                 continue;
+            }
+
+            std::vector<unsigned char> seedBytes = ParseHex(tmpl->seed_hash);
+            RandomX_SetMainSeedHash(seedBytes.data(), seedBytes.size());
+            randomx_vm* vm = RandomX_GetVM(seedBytes.data(), seedBytes.size());
+            if (!vm) {
+                MilliSleep(100);
+                boost::this_thread::interruption_point();
+                continue;
+            }
+
+            arith_uint256 hashTarget;
+            if (!tmpl->target.empty())
+                hashTarget.SetHex(tmpl->target);
+            else
+                hashTarget = UintToArith256(uint256S("0000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
+
+            uint64_t start = GetTimeMillis();
+            uint256 hash;
+            
+            memcpy(hash_input, headerBytes.data(), 108);
+            
+            memcpy(hash_input + 108, nonce, 32);
+            RandomX_HashFirst(vm, hash_input, 140);
+            
+            uint8_t noncePrev[32];
+            memcpy(noncePrev, nonce, 32);
+            IncrementNonce256_Fast(nonce);
+
+            while (GetTimeMillis() - start < 1000) {
+                 memcpy(hash_input + 108, nonce, 32);
+                 if (!RandomX_HashNext(vm, hash_input, 140, hash.begin())) break;
+                 
+                 if (UintToArith256(hash) <= hashTarget) {
+                      std::vector<unsigned char> fullHeader;
+                      fullHeader.insert(fullHeader.end(), headerBytes.begin(), headerBytes.end());
+                      fullHeader.insert(fullHeader.end(), noncePrev, noncePrev + 32);
+                      
+                      std::string submitHex = HexStr(fullHeader);
+                      LogPrintf("P2PoolMiner: Found share! %s\n", submitHex.substr(0, 16));
+                      client.SubmitShare(submitHex);
+                 }
+                 
+                 memcpy(noncePrev, nonce, 32);
+                 IncrementNonce256_Fast(nonce);
+                 
+                 boost::this_thread::interruption_point();
+            }
+            boost::this_thread::interruption_point();
+        }
+    } catch (const boost::thread_interrupted&) {
+        LogPrintf("P2PoolMiner terminated\n");
+    } catch (const std::exception& e) {
+        LogPrintf("P2PoolMiner error: %s\n", e.what());
+    }
+}
+
 void static BitcoinMiner(const CChainParams& chainparams, int thread_id, int total_threads)
 {
+    std::string p2poolUrl = GetArg("-p2poolurl", "");
+    if (!p2poolUrl.empty()) {
+        std::string p2poolAddress = GetArg("-p2pooladdress", "");
+        if (p2poolAddress.empty()) {
+             LogPrintf("Error: -p2pooladdress is required when mining to p2pool\n");
+             return;
+        }
+        P2PoolMiner(p2poolUrl, p2poolAddress, thread_id, total_threads);
+        return;
+    }
+
     LogPrintf("JunoMonetaMiner started (thread %d/%d)\n", thread_id + 1, total_threads);
     SetThreadPriority(THREAD_PRIORITY_LOWEST);
     RenameThread("juno-miner");
@@ -1413,9 +1522,12 @@ void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainpar
         }
     }
 
-    // Start block template updater
-    g_template_stop = false;
-    g_template_thread = new boost::thread(boost::bind(&BlockTemplateUpdater, boost::cref(chainparams)));
+    // Start block template updater (only if not using p2pool)
+    bool p2poolEnabled = !GetArg("-p2poolurl", "").empty();
+    if (!p2poolEnabled) {
+        g_template_stop = false;
+        g_template_thread = new boost::thread(boost::bind(&BlockTemplateUpdater, boost::cref(chainparams)));
+    }
 
     minerThreads = new boost::thread_group();
     for (int i = 0; i < nThreads; i++) {
