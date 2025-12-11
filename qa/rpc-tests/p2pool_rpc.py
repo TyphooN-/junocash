@@ -10,7 +10,6 @@
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
-    assert_raises_rpc_error,
     start_nodes,
     connect_nodes_bi,
 )
@@ -33,8 +32,7 @@ class P2PoolRPCTest(BitcoinTestFramework):
         self.setup_clean_chain = True
 
     def setup_network(self, split=False):
-        self.nodes = start_nodes(self.num_nodes, self.options.tmpdir,
-                                 extra_args=[['-mineraddress=tmRJk1kPcX4q28zPG64rN8R3VipWY6fBaLu']] * self.num_nodes)
+        self.nodes = start_nodes(self.num_nodes, self.options.tmpdir)
 
     def run_test(self):
         print("Testing p2pool RPC methods...")
@@ -99,10 +97,11 @@ class P2PoolRPCTest(BitcoinTestFramework):
         expected_seed_height = (height // 2048) * 2048
         assert_equal(miner_data['randomxseedheight'], expected_seed_height)
 
-        # For genesis epoch (blocks 0-2047), seed should be 0x08...
+        # For genesis epoch (blocks 0-2047), seed should be 0x08... (displayed as ...08 in LE hex)
+        print(f"DEBUG: randomxseedhash = {miner_data['randomxseedhash']}")
         if expected_seed_height == 0:
-            assert miner_data['randomxseedhash'].startswith('08'), \
-                "Genesis epoch seed should start with 08"
+            assert miner_data['randomxseedhash'].endswith('08'), \
+                "Genesis epoch seed should end with 08"
 
         print(f"✓ getminerdata returned valid data for height {miner_data['height']}")
         print(f"  RandomX seed height: {miner_data['randomxseedheight']}")

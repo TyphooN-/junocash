@@ -29,7 +29,7 @@ import errno
 from . import coverage
 from .authproxy import AuthServiceProxy, JSONRPCException
 
-ZCASHD_BINARY = os.path.join('src', 'zcashd')
+ZCASHD_BINARY = os.path.join('src', 'junocashd')
 
 COVERAGE_DIR = None
 PRE_BLOSSOM_BLOCK_TARGET_SPACING = 150
@@ -48,7 +48,7 @@ NU6_1_BRANCH_ID = 0x4DEC4DF0
 # The maximum number of nodes a single test can spawn
 MAX_NODES = 8
 # Don't assign rpc or p2p ports lower than this
-PORT_MIN = 11000
+PORT_MIN = 12000
 # The number of ports to "reserve" for p2p and rpc, each
 PORT_RANGE = 5000
 
@@ -178,7 +178,7 @@ def initialize_datadir(dirname, n, clock_offset=0):
     if not os.path.isdir(datadir):
         os.makedirs(datadir)
     rpc_u, rpc_p = rpc_auth_pair(n)
-    with open(os.path.join(datadir, "zcash.conf"), 'w', encoding='utf8') as f:
+    with open(os.path.join(datadir, "junocashd.conf"), 'w', encoding='utf8') as f:
         f.write("regtest=1\n")
         f.write("showmetrics=0\n")
         f.write("rpcuser=" + rpc_u + "\n")
@@ -259,7 +259,7 @@ def initialize_chain(test_dir, num_nodes, cachedir, cache_behavior='current'):
         block_time = int(time.time()) - (200 * PRE_BLOSSOM_BLOCK_TARGET_SPACING)
         for i in range(MAX_NODES):
             datadir = initialize_datadir(cachedir, i)
-            args = [ zcashd_binary(), "-keypool=1", "-datadir="+datadir, "-discover=0" ]
+            args = [ zcashd_binary(), "-regtest", "-keypool=1", "-datadir="+datadir, "-discover=0" ]
             args.extend([
                 '-i-am-aware-zcashd-will-be-replaced-by-zebrad-and-zallet-in-2025',
                 '-nuparams=5ba81b19:1', # Overwinter
@@ -482,7 +482,7 @@ def start_node(i, dirname, extra_args=None, rpchost=None, timewait=None, binary=
     datadir = os.path.join(dirname, "node"+str(i))
     if binary is None:
         binary = zcashd_binary()
-    args = [ binary, "-datadir="+datadir, "-keypool=1", "-discover=0", "-rest" ]
+    args = [ binary, "-regtest", "-datadir="+datadir, "-keypool=1", "-discover=0", "-rest" ]
     args.extend([
         '-i-am-aware-zcashd-will-be-replaced-by-zebrad-and-zallet-in-2025',
         '-nuparams=5ba81b19:1', # Overwinter
