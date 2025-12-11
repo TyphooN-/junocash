@@ -472,6 +472,238 @@ network:
   peers: []  # Bootstrap peers
 ```
 
+## Built-in Miner Integration
+
+### Overview
+
+JunoCash's built-in miner (`setgenerate`) is designed for solo mining but can be adapted for p2pool use. However, currently p2pool mining requires a separate mining client because:
+
+1. **P2Pool builds custom coinbase transactions** for payout distribution
+2. **Share submission** differs from block submission
+3. **Sidechain synchronization** requires bidirectional communication
+
+### Current Status: Miner Integration
+
+Currently, users can use external mining software or custom scripts to connect to p2pool:
+
+#### Option 1: XMRig (External Miner)
+
+XMRig supports RandomX and can be configured for JunoCash p2pool:
+
+```bash
+# Install xmrig
+git clone https://github.com/xmrig/xmrig.git
+cd xmrig && mkdir build && cd build
+cmake .. -DWITH_RANDOMX=ON
+make -j$(nproc)
+
+# Configure for p2pool
+cat > config.json <<EOF
+{
+  "autosave": true,
+  "cpu": true,
+  "opencl": false,
+  "cuda": false,
+  "pools": [
+    {
+      "url": "127.0.0.1:37888",
+      "user": "YOUR_JUNOCASH_ADDRESS",
+      "pass": "x",
+      "rig-id": "worker1",
+      "keepalive": true,
+      "tls": false
+    }
+  ],
+  "randomx": {
+    "init": -1,
+    "mode": "auto",
+    "1gb-pages": false,
+    "rdmsr": true,
+    "wrmsr": true,
+    "cache_qos": false,
+    "numa": true
+  },
+  "cpu": {
+    "enabled": true,
+    "huge-pages": true,
+    "hw-aes": null,
+    "priority": null,
+    "asm": true,
+    "max-threads-hint": 100
+  }
+}
+EOF
+
+# Start mining
+./xmrig
+```
+
+#### Option 2: Custom Miner Using RPC
+
+Build a simple miner using the p2pool RPC methods:
+
+```python
+#!/usr/bin/env python3
+import requests
+import time
+import struct
+
+class SimpleP2PoolMiner:
+    def __init__(self, daemon_url, p2pool_url, address):
+        self.daemon = daemon_url
+        self.p2pool = p2pool_url
+        self.address = address
+
+    def rpc_call(self, url, method, params=[]):
+        payload = {
+            "jsonrpc": "1.0",
+            "id": "miner",
+            "method": method,
+            "params": params
+        }
+        r = requests.post(url, json=payload)
+        return r.json()['result']
+
+    def mine(self):
+        while True:
+            # Get work from p2pool
+            work = self.rpc_call(self.p2pool, 'get_share_template', [self.address])
+
+            # Mine share
+            header_hex = work['header']
+            target = int(work['target'], 16)
+            seed_hash = work['seed_hash']
+
+            print(f"Mining share, target difficulty: {work['difficulty']}")
+
+            for nonce in range(1000000):
+                # Update nonce in header
+                header = bytearray.fromhex(header_hex)
+                struct.pack_into('<I', header, 108, nonce)  # Nonce at offset 108
+
+                # Calculate PoW via daemon
+                header_hex_nonce = header.hex()
+                pow_hash = self.rpc_call(
+                    self.daemon,
+                    'calc_pow',
+                    [header_hex_nonce, seed_hash]
+                )
+
+                # Check if meets share target
+                if int(pow_hash, 16) < target:
+                    # Submit share to p2pool
+                    self.rpc_call(
+                        self.p2pool,
+                        'submit_share',
+                        [header_hex_nonce, self.address]
+                    )
+                    print(f"✓ Share found! Hash: {pow_hash[:16]}...")
+                    break
+
+            time.sleep(1)
+
+# Usage
+miner = SimpleP2PoolMiner(
+    daemon_url='http://127.0.0.1:8232',
+    p2pool_url='http://127.0.0.1:37889',
+    address='jcash1your_address'
+)
+miner.mine()
+```
+
+### Future: Native Built-in Miner Support
+
+To enable the built-in miner for p2pool, these enhancements would be needed:
+
+#### 1. P2Pool Template Fetching
+
+Add `-p2poolurl` option to fetch templates from p2pool:
+
+```conf
+# junocash.conf
+p2poolurl=http://127.0.0.1:37889
+p2pooladdress=jcash1your_mining_address
+```
+
+When enabled, the miner would:
+- Poll p2pool's `get_share_template` RPC instead of creating local templates
+- Submit shares via p2pool's `submit_share` RPC
+- Automatically handle sidechain synchronization
+
+#### 2. Share vs Block Submission
+
+The miner would need to distinguish:
+
+```cpp
+// In BitcoinMiner() function
+if (fP2PoolMode) {
+    if (hash < sidechain_target) {
+        // Submit share to p2pool
+        SubmitShareToP2Pool(pblock, nonce);
+    }
+    if (hash < mainchain_target) {
+        // P2pool will submit mainchain block
+        // Miner just reports finding mainchain solution
+        NotifyP2PoolMainchainBlock(pblock);
+    }
+} else {
+    // Solo mining - submit directly to blockchain
+    if (hash < mainchain_target) {
+        ProcessNewBlock(state, chainparams, NULL, pblock, true, NULL);
+    }
+}
+```
+
+#### 3. Configuration Example
+
+Once implemented, users could mine to p2pool as easily as solo mining:
+
+```bash
+# Solo mining (current)
+junocashd -gen=1 -genproclimit=4 -mineraddress=jcash1your_address
+
+# P2Pool mining (future)
+junocashd -gen=1 -genproclimit=4 -p2poolurl=http://localhost:37889 -p2pooladdress=jcash1your_address
+```
+
+### Implementation Roadmap
+
+1. **Phase 1** ✅ (Completed)
+   - Implement core p2pool RPC methods
+   - getminerdata, calc_pow, add_aux_pow
+   - Documentation and testing
+
+2. **Phase 2** (Community/Future)
+   - Build p2pool daemon (separate project)
+   - Implement sidechain consensus
+   - Add share validation and payout logic
+   - Create stratum server for external miners
+
+3. **Phase 3** (Future Enhancement)
+   - Integrate built-in miner with p2pool
+   - Add `-p2poolurl` configuration option
+   - Implement share submission interface
+   - Add p2pool status monitoring to GUI
+
+### Miner Considerations
+
+Users can choose between external miners (like XMRig) or custom implementations:
+
+**External Miners (XMRig):**
+- **Hardware Optimization**: NUMA support, huge pages, MSR tuning for maximum hashrate
+- **Flexibility**: Can mine to multiple pools/failovers
+- **Monitoring**: Built-in benchmarking and statistics
+- **Network Efficiency**: Persistent connections, optimized protocols
+
+**Native / Custom Miners:**
+- **Simplicity**: No external dependencies
+- **Integration**: Direct interaction with the daemon
+- **Control**: Full customization via RPC methods
+- **Network Health**: Helps propagate the blockchain by running a full node
+
+
+The built-in miner (when fully integrated) will offer the simplest user experience for p2pool mining.
+
 ## Future Enhancements
 
 Potential improvements to JunoCash's p2pool support:
