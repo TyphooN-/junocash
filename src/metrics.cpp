@@ -7,6 +7,7 @@
 
 #include "chainparams.h"
 #include "init.h"
+#include "key_io.h"
 #include "checkpoints.h"
 #include "main.h"
 #include "miner.h"
