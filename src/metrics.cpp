@@ -2069,11 +2069,39 @@ static void toggleP2PoolMode()
         // Enable P2Pool mode
         std::cout << "Enabling P2Pool mode..." << std::endl << std::flush;
 
-        // Get wallet address
-        std::string addr = GetArg("-p2pooladdress", GetArg("-mineraddress", ""));
+        // Get wallet address - try config first, then miner address
+        std::string addr = GetArg("-p2pooladdress", "");
+
+        if (addr.empty()) {
+            // Try to get miner address
+            addr = GetArg("-mineraddress", "");
+
+            // If still empty, try to get from wallet
+            if (addr.empty()) {
+#ifdef ENABLE_WALLET
+                std::optional<MinerAddress> minerAddress;
+                GetMainSignals().AddressForMining(minerAddress);
+
+                if (minerAddress.has_value()) {
+                    // Convert MinerAddress to string
+                    KeyIO keyIO(Params());
+                    auto* script = std::get_if<boost::shared_ptr<CReserveScript>>(&minerAddress.value());
+                    if (script && *script) {
+                        // We have a transparent address from wallet
+                        CTxDestination dest;
+                        if (ExtractDestination((*script)->reserveScript, dest)) {
+                            addr = keyIO.EncodeDestination(dest);
+                        }
+                    }
+                }
+#endif
+            }
+        }
+
         if (addr.empty()) {
             std::cout << "Error: No wallet address configured." << std::endl;
-            std::cout << "Set -p2pooladdress or -mineraddress in junocash.conf" << std::endl << std::flush;
+            std::cout << "Set -p2pooladdress or -mineraddress in junocash.conf" << std::endl;
+            std::cout << "Or ensure wallet is loaded for address generation." << std::endl << std::flush;
             MilliSleep(2000);
             return;
         }
