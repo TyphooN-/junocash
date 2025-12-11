@@ -31,6 +31,10 @@
 #include "metrics.h"
 #include "miner.h"
 #include "net.h"
+#ifdef ENABLE_MINING
+#include "p2pool_manager.h"
+#include "p2pool_status.h"
+#endif
 #include "policy/policy.h"
 #include "rpc/server.h"
 #include "rpc/register.h"
@@ -214,6 +218,13 @@ void Shutdown()
 #endif
 #ifdef ENABLE_MINING
     GenerateBitcoins(false, 0, Params());
+
+    // Stop P2Pool if running
+    P2PoolProcessManager& mgr = P2PoolProcessManager::GetInstance();
+    if (mgr.IsRunning()) {
+        LogPrintf("Stopping P2Pool...\n");
+        mgr.Stop();
+    }
 #endif
     StopNode();
     StopTorControl();
@@ -504,6 +515,9 @@ std::string HelpMessage(HelpMessageMode mode)
     strUsage += HelpMessageOpt("-mineraddress=<addr>", _("(NOT NECESSARY) Send mined coins to a specific transparent P2PKH address (t...). A new address is generated per block if not set. Use t_getminingaddress RPC to get an address."));
     strUsage += HelpMessageOpt("-p2poolurl=<url>", _("URL of the P2Pool node (e.g. http://127.0.0.1:37889)"));
     strUsage += HelpMessageOpt("-p2pooladdress=<addr>", _("Wallet address for P2Pool mining payout"));
+    strUsage += HelpMessageOpt("-p2poolautostart", _("Auto-start P2Pool daemon on startup if previously enabled (default: 0)"));
+    strUsage += HelpMessageOpt("-p2poolbinary=<path>", _("Path to P2Pool binary (default: <datadir>/junocash-p2pool)"));
+    strUsage += HelpMessageOpt("-p2poollightmode", _("Run P2Pool in light mode to save 2GB RAM (default: 0)"));
     strUsage += HelpMessageOpt("-randomxfastmode", _("Use RandomX fast mode with 2GB dataset for ~2x mining speed (default: 0)"));
     strUsage += HelpMessageOpt("-randomxmsr", _("Enable MSR (Model Specific Register) optimizations for 10-15% hashrate improvement (default: 1, requires setup-msr-permissions.sh)"));
     strUsage += HelpMessageOpt("-randomxcacheqos", _("Enable L3 cache QoS allocation for mining threads, 2-5% additional improvement (default: 1, requires -randomxmsr=1)"));
@@ -2167,6 +2181,34 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         GenerateBitcoins(enableMining, GetArg("-genproclimit", DEFAULT_GENERATE_THREADS), chainparams);
         if (enableMining) {
             SetMiningStartTime();  // Track start time for progress display
+        }
+    }
+
+    // P2Pool auto-start
+    if (GetBoolArg("-p2poolautostart", false)) {
+        string addr = GetArg("-p2pooladdress", GetArg("-mineraddress", ""));
+        if (!addr.empty()) {
+            LogPrintf("Auto-starting P2Pool (address: %s)\n", addr);
+
+            P2PoolConfig config;
+            config.binaryPath = GetP2PoolBinaryPath();
+            config.walletAddress = addr;
+            config.host = "127.0.0.1";
+            config.rpcPort = GetArg("-rpcport", 8232);
+            config.lightMode = GetBoolArg("-p2poollightmode", false);
+            config.rpcUser = GetArg("-rpcuser", "");
+            config.rpcPassword = GetArg("-rpcpassword", "");
+
+            P2PoolProcessManager& mgr = P2PoolProcessManager::GetInstance();
+            if (mgr.Start(config)) {
+                LogPrintf("P2Pool started (PID: %d)\n", mgr.GetPID());
+                mapArgs["-p2poolurl"] = "http://127.0.0.1:37889";
+                mapArgs["-p2pooladdress"] = addr;
+            } else {
+                LogPrintf("WARNING: P2Pool auto-start failed\n");
+            }
+        } else {
+            LogPrintf("WARNING: P2Pool auto-start requested but no wallet address configured\n");
         }
     }
 #endif

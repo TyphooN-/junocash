@@ -175,6 +175,8 @@ void IncrementExtraNonce(
     const Consensus::Params& consensusParams);
 /** Run the miner threads */
 void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainparams);
+/** Check if P2Pool mining mode is active */
+bool IsP2PoolModeActive();
 #endif
 
 int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev);

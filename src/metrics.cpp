@@ -11,6 +11,8 @@
 #include "checkpoints.h"
 #include "main.h"
 #include "miner.h"
+#include "p2pool_manager.h"
+#include "p2pool_status.h"
 #include "rpc/server.h"
 #include "timedata.h"
 #include "ui_interface.h"
@@ -1289,6 +1291,134 @@ int printMiningStatus(bool mining)
             }
             lines++;
 
+            // P2Pool mode status
+            bool p2poolMode = !GetArg("-p2poolurl", "").empty() && !GetArg("-p2pooladdress", "").empty();
+            P2PoolProcessManager& p2poolMgr = P2PoolProcessManager::GetInstance();
+
+            if (p2poolMode || p2poolMgr.IsRunning()) {
+                if (p2poolMgr.IsRunning()) {
+                    drawRow("Mode", "\e[1;36mP2Pool Mining\e[0m");
+                } else {
+                    drawRow("Mode", "\e[1;31mP2Pool (Disconnected)\e[0m");
+                }
+                lines++;
+
+                if (p2poolMgr.IsRunning()) {
+                    // Show P2Pool PID
+                    drawRow("P2Pool PID", strprintf("%d", p2poolMgr.GetPID()));
+                    lines++;
+
+                    // Show P2Pool uptime
+                    int64_t uptime = p2poolMgr.GetUptime();
+                    if (uptime > 0) {
+                        int hours = uptime / 3600;
+                        int minutes = (uptime % 3600) / 60;
+                        drawRow("P2Pool Uptime", strprintf("%dh %dm", hours, minutes));
+                        lines++;
+                    }
+
+                    // Show P2Pool connection status
+                    P2PoolStatus status = P2PoolStatusMonitor::GetInstance().GetStatus();
+                    std::string connStatus = status.connected ?
+                        "\e[1;32m● Connected\e[0m" : "\e[1;31m● Disconnected\e[0m";
+                    drawRow("P2Pool Status", connStatus);
+                    lines++;
+
+                    // Show connected miners
+                    if (status.connected) {
+                        drawRow("Connected Miners", strprintf("%d", status.connectedMiners));
+                        lines++;
+
+                        // Show pool hashrate if available
+                        if (status.poolHashrate > 0.0) {
+                            std::string hashrateStr;
+                            if (status.poolHashrate >= 1000000) {
+                                hashrateStr = strprintf("%.2f MH/s", status.poolHashrate / 1000000);
+                            } else if (status.poolHashrate >= 1000) {
+                                hashrateStr = strprintf("%.2f kH/s", status.poolHashrate / 1000);
+                            } else {
+                                hashrateStr = strprintf("%.2f H/s", status.poolHashrate);
+                            }
+                            drawRow("Pool Hashrate", hashrateStr);
+                            lines++;
+
+                            // Show estimated time to next share
+                            if (status.shareDifficulty > 0) {
+                                int64_t estShareTime = status.shareDifficulty / (status.poolHashrate > 0 ? status.poolHashrate : 1);
+                                int64_t now = GetTime();
+                                int64_t timeSinceLast = status.lastShareTimestamp > 0 ? (now - status.lastShareTimestamp) : 0;
+
+                                // Calculate progress percentage
+                                double progress = estShareTime > 0 ? (double)timeSinceLast / estShareTime * 100.0 : 0;
+                                if (progress > 100.0) progress = 100.0;
+
+                                // Format time remaining
+                                int64_t timeRemaining = estShareTime - timeSinceLast;
+                                if (timeRemaining < 0) timeRemaining = 0;
+
+                                std::string shareTimeStr;
+                                if (timeRemaining >= 3600) {
+                                    int hours = timeRemaining / 3600;
+                                    int mins = (timeRemaining % 3600) / 60;
+                                    shareTimeStr = strprintf("~%dh %dm (%.0f%%)", hours, mins, progress);
+                                } else if (timeRemaining >= 60) {
+                                    int mins = timeRemaining / 60;
+                                    int secs = timeRemaining % 60;
+                                    shareTimeStr = strprintf("~%dm %ds (%.0f%%)", mins, secs, progress);
+                                } else {
+                                    shareTimeStr = strprintf("~%ds (%.0f%%)", (int)timeRemaining, progress);
+                                }
+
+                                drawRow("Next Share", shareTimeStr);
+                                lines++;
+                            }
+
+                            // Show estimated time to next block
+                            if (status.networkDifficulty > 0) {
+                                int64_t estBlockTime = status.networkDifficulty / (status.poolHashrate > 0 ? status.poolHashrate : 1);
+
+                                std::string blockTimeStr;
+                                if (estBlockTime >= 86400) {
+                                    int days = estBlockTime / 86400;
+                                    int hours = (estBlockTime % 86400) / 3600;
+                                    blockTimeStr = strprintf("~%dd %dh", days, hours);
+                                } else if (estBlockTime >= 3600) {
+                                    int hours = estBlockTime / 3600;
+                                    int mins = (estBlockTime % 3600) / 60;
+                                    blockTimeStr = strprintf("~%dh %dm", hours, mins);
+                                } else if (estBlockTime >= 60) {
+                                    int mins = estBlockTime / 60;
+                                    blockTimeStr = strprintf("~%dm", mins);
+                                } else {
+                                    blockTimeStr = strprintf("~%ds", (int)estBlockTime);
+                                }
+
+                                drawRow("Next Block", blockTimeStr);
+                                lines++;
+                            }
+
+                            // Show pool effort if available
+                            if (status.effortPercent > 0.0) {
+                                std::string effortColor = "\e[1;32m"; // Green
+                                if (status.effortPercent > 200.0) {
+                                    effortColor = "\e[1;31m"; // Red for high effort
+                                } else if (status.effortPercent > 150.0) {
+                                    effortColor = "\e[1;33m"; // Yellow for medium effort
+                                }
+
+                                std::string effortStr = strprintf("%s%.1f%%\e[0m", effortColor, status.effortPercent);
+                                drawRow("Pool Effort", effortStr);
+                                lines++;
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Solo mining mode
+                drawRow("Mode", "Solo Mining");
+                lines++;
+            }
+
             // Show CPU model
             static std::string cpuModel = GetCPUModel();
             if (cpuModel != "Unknown CPU") {
@@ -1613,8 +1743,12 @@ int printMiningStatus(bool mining)
         std::string lightStatus = isLightMode ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
         std::string hugepagesStatus = hugepagesInUse ? "\e[1;32mON\e[0m" : "\e[1;31mOFF\e[0m";
 
-        std::string controls2 = strprintf("\e[1;37m[L]\e[0m Light Mode: %s  \e[1;37m[F]\e[0m Fast Mode: %s  \e[1;37m[H]\e[0m Hugepages: %s  \e[1;37m[B]\e[0m Benchmark",
-            lightStatus.c_str(), fastStatus.c_str(), hugepagesStatus.c_str());
+        // Check P2Pool mode
+        bool p2poolMode = !GetArg("-p2poolurl", "").empty() && !GetArg("-p2pooladdress", "").empty();
+        std::string p2poolStatus = p2poolMode ? "\e[1;36mON\e[0m" : "\e[1;31mOFF\e[0m";
+
+        std::string controls2 = strprintf("\e[1;37m[L]\e[0m Light Mode: %s  \e[1;37m[F]\e[0m Fast Mode: %s  \e[1;37m[H]\e[0m Hugepages: %s  \e[1;37m[O]\e[0m P2Pool: %s  \e[1;37m[B]\e[0m Benchmark",
+            lightStatus.c_str(), fastStatus.c_str(), hugepagesStatus.c_str(), p2poolStatus.c_str());
         drawCentered(controls2);
     } else {
         drawCentered("\e[1;37m[M]\e[0m Mining: \e[1;31mOFF\e[0m  \e[1;37m[Q]\e[0m Quit");
@@ -1897,6 +2031,97 @@ static void toggleMining()
         miningStartTime = 0;  // Clear start time when mining stops
         LogPrintf("User disabled mining\n");
     }
+}
+
+// Toggle P2Pool mode on/off
+static void toggleP2PoolMode()
+{
+    P2PoolProcessManager& mgr = P2PoolProcessManager::GetInstance();
+    bool enabled = !GetArg("-p2poolurl", "").empty() && !GetArg("-p2pooladdress", "").empty();
+
+    std::cout << "\n\n" << std::flush;
+
+    if (enabled) {
+        // Disable P2Pool mode
+        std::cout << "Disabling P2Pool mode..." << std::endl << std::flush;
+
+        // Clear P2Pool settings
+        mapArgs["-p2poolurl"] = "";
+        mapArgs["-p2pooladdress"] = "";
+        mapArgs["-p2poolautostart"] = "0";
+
+        // Stop P2Pool process
+        mgr.Stop();
+
+        // Restart mining threads in solo mode if currently mining
+        bool mining = GetBoolArg("-gen", false);
+        if (mining) {
+            int threads = GetArg("-genproclimit", DEFAULT_GENERATE_THREADS);
+            GenerateBitcoins(false, 0, Params());
+            MilliSleep(100);
+            GenerateBitcoins(true, threads, Params());
+        }
+
+        std::cout << "P2Pool mode disabled." << std::endl << std::flush;
+        LogPrintf("User disabled P2Pool mode\n");
+
+    } else {
+        // Enable P2Pool mode
+        std::cout << "Enabling P2Pool mode..." << std::endl << std::flush;
+
+        // Get wallet address
+        std::string addr = GetArg("-p2pooladdress", GetArg("-mineraddress", ""));
+        if (addr.empty()) {
+            std::cout << "Error: No wallet address configured." << std::endl;
+            std::cout << "Set -p2pooladdress or -mineraddress in junocash.conf" << std::endl << std::flush;
+            MilliSleep(2000);
+            return;
+        }
+
+        // Start P2Pool process
+        P2PoolConfig config;
+        config.binaryPath = GetP2PoolBinaryPath();
+        config.walletAddress = addr;
+        config.host = "127.0.0.1";
+        config.rpcPort = GetArg("-rpcport", 8232);
+        config.lightMode = GetBoolArg("-p2poollightmode", false);
+        config.rpcUser = GetArg("-rpcuser", "");
+        config.rpcPassword = GetArg("-rpcpassword", "");
+
+        if (!mgr.Start(config)) {
+            std::cout << "Error: Failed to start P2Pool." << std::endl;
+            std::cout << "Check p2pool.log for details." << std::endl << std::flush;
+            MilliSleep(2000);
+            return;
+        }
+
+        std::cout << "P2Pool started (PID " << mgr.GetPID() << ")." << std::endl << std::flush;
+
+        // Wait for P2Pool to be ready
+        std::cout << "Waiting for P2Pool to initialize..." << std::endl << std::flush;
+        for (int i = 0; i < 20 && !P2PoolStatusMonitor::GetInstance().IsReady(); i++) {
+            MilliSleep(500);
+        }
+
+        // Set P2Pool URL to redirect miner
+        mapArgs["-p2poolurl"] = "http://127.0.0.1:37889";
+        mapArgs["-p2pooladdress"] = addr;
+        mapArgs["-p2poolautostart"] = "1";
+
+        // Restart mining threads if currently mining
+        bool mining = GetBoolArg("-gen", false);
+        if (mining) {
+            int threads = GetArg("-genproclimit", DEFAULT_GENERATE_THREADS);
+            GenerateBitcoins(false, 0, Params());
+            MilliSleep(100);
+            GenerateBitcoins(true, threads, Params());
+        }
+
+        std::cout << "P2Pool mode enabled." << std::endl << std::flush;
+        LogPrintf("User enabled P2Pool mode\n");
+    }
+
+    MilliSleep(1000);
 }
 
 // Toggle Fast Mode on/off (turns off Light Mode)
@@ -3199,6 +3424,9 @@ void ThreadShowMetricsScreen()
                             promptForPercentage(rows);
                             break;  // Force screen refresh
                         }
+                    } else if (key == 'O' || key == 'o') {
+                        toggleP2PoolMode();
+                        break;  // Force screen refresh
                     }
                 }
             }

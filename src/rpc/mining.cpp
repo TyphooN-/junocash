@@ -24,6 +24,8 @@
 #include "metrics.h"
 #include "miner.h"
 #include "net.h"
+#include "p2pool_manager.h"
+#include "p2pool_status.h"
 #include "pow.h"
 #include "rpc/server.h"
 #include "txmempool.h"
@@ -352,6 +354,121 @@ UniValue setgenerate(const UniValue& params, bool fHelp)
 
     return NullUniValue;
 }
+
+UniValue setp2poolmode(const UniValue& params, bool fHelp)
+{
+    if (fHelp || params.size() < 1 || params.size() > 2)
+        throw runtime_error(
+            "setp2poolmode enable ( autostart )\n"
+            "\nEnable or disable P2Pool mining mode.\n"
+            "When enabled, starts the P2Pool daemon and redirects native miner to mine shares.\n"
+            "When disabled, stops P2Pool and reverts to solo mining.\n"
+            "\nArguments:\n"
+            "1. enable      (boolean, required) true to enable P2Pool mode, false to disable\n"
+            "2. autostart   (boolean, optional, default=true) Persist setting for auto-start on daemon restart\n"
+            "\nResult:\n"
+            "{\n"
+            "  \"p2poolmode\": true|false,        (boolean) P2Pool mode enabled\n"
+            "  \"p2poolrunning\": true|false,     (boolean) P2Pool process running\n"
+            "  \"pid\": n                         (numeric, optional) P2Pool process ID\n"
+            "}\n"
+            "\nExamples:\n"
+            + HelpExampleCli("setp2poolmode", "true")
+            + HelpExampleCli("setp2poolmode", "false")
+            + HelpExampleCli("setp2poolmode", "true false")
+            + HelpExampleRpc("setp2poolmode", "true")
+        );
+
+    if (Params().MineBlocksOnDemand())
+        throw JSONRPCError(RPC_METHOD_NOT_FOUND, "P2Pool mode not supported on regtest");
+
+    bool fEnable = params[0].get_bool();
+    bool fAutoStart = params.size() > 1 ? params[1].get_bool() : true;
+
+    P2PoolProcessManager& mgr = P2PoolProcessManager::GetInstance();
+
+    if (fEnable) {
+        // Enable P2Pool mode
+
+        // Get wallet address
+        string walletAddr = GetArg("-p2pooladdress", GetArg("-mineraddress", ""));
+        if (walletAddr.empty()) {
+            throw JSONRPCError(RPC_INVALID_PARAMETER,
+                "No wallet address configured. Set -p2pooladdress or -mineraddress");
+        }
+
+        // Start P2Pool if not already running
+        if (!mgr.IsRunning()) {
+            P2PoolConfig config;
+            config.binaryPath = GetP2PoolBinaryPath();
+            config.walletAddress = walletAddr;
+            config.host = "127.0.0.1";
+            config.rpcPort = GetArg("-rpcport", 8232);
+            config.lightMode = GetBoolArg("-p2poollightmode", false);
+            config.rpcUser = GetArg("-rpcuser", "");
+            config.rpcPassword = GetArg("-rpcpassword", "");
+
+            if (!mgr.Start(config)) {
+                throw JSONRPCError(RPC_INTERNAL_ERROR, "Failed to start P2Pool process");
+            }
+
+            // Wait for P2Pool to be ready (up to 10 seconds)
+            for (int i = 0; i < 20; i++) {
+                if (P2PoolStatusMonitor::GetInstance().IsReady()) {
+                    break;
+                }
+                MilliSleep(500);
+            }
+        }
+
+        // Set P2Pool URL to redirect miner
+        mapArgs["-p2poolurl"] = "http://127.0.0.1:37889";
+        mapArgs["-p2pooladdress"] = walletAddr;
+
+        if (fAutoStart) {
+            mapArgs["-p2poolautostart"] = "1";
+        }
+
+        // Restart mining threads if currently mining
+        bool mining = GetBoolArg("-gen", false);
+        if (mining) {
+            int threads = GetArg("-genproclimit", DEFAULT_GENERATE_THREADS);
+            GenerateBitcoins(false, 0, Params());
+            MilliSleep(100);
+            GenerateBitcoins(true, threads, Params());
+        }
+
+    } else {
+        // Disable P2Pool mode
+
+        // Clear P2Pool settings
+        mapArgs["-p2poolurl"] = "";
+        mapArgs["-p2pooladdress"] = "";
+        mapArgs["-p2poolautostart"] = "0";
+
+        // Stop P2Pool process
+        mgr.Stop();
+
+        // Restart mining threads in solo mode if currently mining
+        bool mining = GetBoolArg("-gen", false);
+        if (mining) {
+            int threads = GetArg("-genproclimit", DEFAULT_GENERATE_THREADS);
+            GenerateBitcoins(false, 0, Params());
+            MilliSleep(100);
+            GenerateBitcoins(true, threads, Params());
+        }
+    }
+
+    // Build result
+    UniValue result(UniValue::VOBJ);
+    result.pushKV("p2poolmode", fEnable);
+    result.pushKV("p2poolrunning", mgr.IsRunning());
+    if (mgr.IsRunning()) {
+        result.pushKV("pid", (int64_t)mgr.GetPID());
+    }
+
+    return result;
+}
 #endif
 
 UniValue getmininginfo(const UniValue& params, bool fHelp)
@@ -400,6 +517,26 @@ UniValue getmininginfo(const UniValue& params, bool fHelp)
     obj.pushKV("chain",            Params().NetworkIDString());
 #ifdef ENABLE_MINING
     obj.pushKV("generate",         getgenerate(params, false));
+
+    // P2Pool status
+    bool p2poolMode = !GetArg("-p2poolurl", "").empty() && !GetArg("-p2pooladdress", "").empty();
+    obj.pushKV("p2poolmode", p2poolMode);
+
+    P2PoolProcessManager& p2poolMgr = P2PoolProcessManager::GetInstance();
+    obj.pushKV("p2poolrunning", p2poolMgr.IsRunning());
+
+    if (p2poolMgr.IsRunning()) {
+        obj.pushKV("p2poolpid", (int64_t)p2poolMgr.GetPID());
+        obj.pushKV("p2pooluptime", p2poolMgr.GetUptime());
+
+        P2PoolStatus status = P2PoolStatusMonitor::GetInstance().GetStatus();
+        obj.pushKV("p2poolconnected", status.connected);
+        obj.pushKV("p2poolminers", status.connectedMiners);
+        obj.pushKV("p2poolshares", (uint64_t)status.totalShares);
+        if (status.poolHashrate > 0.0) {
+            obj.pushKV("p2poolhashrate", status.poolHashrate);
+        }
+    }
 #endif
     return obj;
 }
@@ -1514,6 +1651,7 @@ static const CRPCCommand commands[] =
 #ifdef ENABLE_MINING
     { "generating",         "getgenerate",            &getgenerate,            true  },
     { "generating",         "setgenerate",            &setgenerate,            true  },
+    { "mining",             "setp2poolmode",          &setp2poolmode,          true  },
     { "generating",         "generate",               &generate,               true  },
 #endif
 };

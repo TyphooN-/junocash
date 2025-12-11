@@ -396,6 +396,10 @@ libbitcoin_server_a_SOURCES = \
   net.cpp \
   p2pool_client.cpp \
   p2pool_client.h \
+  p2pool_manager.cpp \
+  p2pool_manager.h \
+  p2pool_status.cpp \
+  p2pool_status.h \
   noui.cpp \
   numa_helper.cpp \
   policy/policy.cpp \

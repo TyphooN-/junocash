@@ -1536,4 +1536,9 @@ void GenerateBitcoins(bool fGenerate, int nThreads, const CChainParams& chainpar
     }
 }
 
+bool IsP2PoolModeActive()
+{
+    return !GetArg("-p2poolurl", "").empty() && !GetArg("-p2pooladdress", "").empty();
+}
+
 #endif // ENABLE_MINING
