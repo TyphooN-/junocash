@@ -8,10 +8,13 @@
 
 #ifdef WIN32
 #include <windows.h>
-typedef DWORD pid_t;
-#else
+#endif
+
+#if defined(__MINGW32__) || !defined(WIN32)
 #include <sys/types.h>
 #include <unistd.h>
+#else
+typedef DWORD pid_t;
 #endif
 
 /**
