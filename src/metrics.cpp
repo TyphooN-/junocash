@@ -1636,6 +1636,33 @@ int printMiningStatus(bool mining)
                     drawRow("Pool Miners", strprintf("%d", p2status.connectedMiners));
                     lines++;
                 }
+
+                // Last share time
+                if (p2status.lastShareTimestamp > 0) {
+                    int64_t timeSinceShare = GetTime() - p2status.lastShareTimestamp;
+                    std::string timeSinceStr;
+                    if (timeSinceShare < 60) {
+                        timeSinceStr = strprintf("%d seconds ago", (int)timeSinceShare);
+                    } else if (timeSinceShare < 3600) {
+                        timeSinceStr = strprintf("%d minutes ago", (int)(timeSinceShare / 60));
+                    } else if (timeSinceShare < 86400) {
+                        timeSinceStr = strprintf("%d hours ago", (int)(timeSinceShare / 3600));
+                    } else {
+                        timeSinceStr = strprintf("%d days ago", (int)(timeSinceShare / 86400));
+                    }
+                    drawRow("Last Share", timeSinceStr);
+                    lines++;
+                }
+
+                // Estimated share time (if we have hashrate and share difficulty)
+                double currentHashrate = GetLocalSolPS();
+                if (currentHashrate > 0 && p2status.shareDifficulty > 0) {
+                    // Expected time to find a share = shareDifficulty / hashrate
+                    double expectedShareTime = (double)p2status.shareDifficulty / currentHashrate;
+                    std::string expectedShareStr = DisplayDuration(expectedShareTime, DurationFormat::FULL);
+                    drawRow("Est. Share Time", expectedShareStr);
+                    lines++;
+                }
             }
 
             // Show mining probability and expected time to find block
