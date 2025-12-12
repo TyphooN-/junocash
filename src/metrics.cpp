@@ -23,6 +23,7 @@
 #include "wallet/wallet.h"
 #include "crypto/randomx_wrapper.h"
 #include "hw/dmi/DmiReader.h"
+#include "zcash/Address.hpp"
 
 #include <boost/range/irange.hpp>
 #include <boost/thread.hpp>
@@ -2078,22 +2079,25 @@ static void toggleP2PoolMode()
             // Try to get miner address
             addr = GetArg("-mineraddress", "");
 
-            // If still empty, try to get from wallet
+            // If still empty, try to auto-generate unified address from wallet
             if (addr.empty()) {
 #ifdef ENABLE_WALLET
-                std::optional<MinerAddress> minerAddress;
-                GetMainSignals().AddressForMining(minerAddress);
+                if (pwalletMain) {
+                    LOCK2(cs_main, pwalletMain->cs_wallet);
 
-                if (minerAddress.has_value()) {
-                    // Convert MinerAddress to string
-                    KeyIO keyIO(Params());
-                    auto* script = std::get_if<boost::shared_ptr<CReserveScript>>(&minerAddress.value());
-                    if (script && *script) {
-                        // We have a transparent address from wallet
-                        CTxDestination dest;
-                        if (ExtractDestination((*script)->reserveScript, dest)) {
-                            addr = keyIO.EncodeDestination(dest);
-                        }
+                    // Try to generate a unified address from account 0 with default receivers (Orchard)
+                    libzcash::AccountId account = 0;
+                    auto receiverTypes = CWallet::DefaultReceiverTypes(chainActive.Height());
+
+                    auto result = pwalletMain->GenerateUnifiedAddress(account, receiverTypes);
+
+                    // Check if address generation succeeded
+                    auto* addrPair = std::get_if<std::pair<libzcash::UnifiedAddress, libzcash::diversifier_index_t>>(&result);
+                    if (addrPair) {
+                        KeyIO keyIO(Params());
+                        addr = keyIO.EncodePaymentAddress(addrPair->first);
+                        std::cout << "Auto-generated unified address for P2Pool mining" << std::endl << std::flush;
+                        LogPrintf("P2Pool: Auto-generated unified address for mining\n");
                     }
                 }
 #endif
@@ -2101,10 +2105,11 @@ static void toggleP2PoolMode()
         }
 
         if (addr.empty()) {
-            std::cout << "Error: No wallet address configured." << std::endl;
+            std::cout << "Error: No P2Pool-compatible address configured." << std::endl;
+            std::cout << "P2Pool requires a unified or shielded address." << std::endl;
             std::cout << "Set -p2pooladdress or -mineraddress in junocash.conf" << std::endl;
-            std::cout << "Or ensure wallet is loaded for address generation." << std::endl << std::flush;
-            MilliSleep(2000);
+            std::cout << "Generate a unified address with: junocash-cli z_getaddressforaccount 0" << std::endl << std::flush;
+            MilliSleep(3000);
             return;
         }
 
