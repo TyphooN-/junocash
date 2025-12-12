@@ -10,6 +10,11 @@ ifneq ($(host_os),darwin)
 $(package)_dependencies=libcxx
 endif
 
+ifeq ($(host_os),mingw32)
+$(package)_dependencies+=libunwind
+endif
+
+
 define $(package)_set_vars
 $(package)_config_opts=--disable-shared --enable-cxx --disable-replication --enable-option-checking
 $(package)_config_opts_mingw32=--enable-mingw
@@ -24,11 +29,13 @@ ifneq ($(host_os),darwin)
 $(package)_config_opts_aarch64=--disable-atomicsupport
 endif
 $(package)_cxxflags+=-std=c++17
-$(package)_cflags+=-Wno-deprecated-non-prototype
+$(package)_cflags+=-Wno-deprecated-non-prototype -Wno-incompatible-pointer-types -Wno-implicit-function-declaration
 
 $(package)_ldflags+=-static-libstdc++ -Wno-unused-command-line-argument
 ifeq ($(host_os),freebsd)
   $(package)_ldflags+=-lcxxrt
+else ifeq ($(host_os),mingw32)
+  $(package)_ldflags+=
 else
   $(package)_ldflags+=-lc++abi
 endif
@@ -48,9 +55,18 @@ define $(package)_build_cmds
   $(MAKE) libdb_cxx-6.2.a libdb-6.2.a
 endef
 
-ifneq ($(build_os),darwin)
+ifeq ($(host_os),mingw32)
+# For Windows, only install libraries and headers (utilities don't build properly)
+define $(package)_stage_cmds
+  $(MAKE) DESTDIR=$($(package)_staging_dir) install_lib install_include
+endef
+else ifneq ($(build_os),darwin)
 # Install the BDB utilities as well, so that we have the specific compatible
 # versions for recovery purposes (https://github.com/zcash/zcash/issues/4537).
+define $(package)_build_cmds
+  $(MAKE) libdb_cxx-6.2.a libdb-6.2.a all
+endef
+
 define $(package)_stage_cmds
   $(MAKE) DESTDIR=$($(package)_staging_dir) install
 endef

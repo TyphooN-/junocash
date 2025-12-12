@@ -4,6 +4,10 @@ $(package)_download_path=https://download.libsodium.org/libsodium/releases/
 $(package)_file_name=$(package)-$($(package)_version).tar.gz
 $(package)_sha256_hash=ebb65ef6ca439333c2bb41a0c1990587288da07f6c7fd07cb3a18cc18d30ce19
 $(package)_dependencies=
+ifeq ($(host_os),mingw32)
+$(package)_dependencies+=libcxx libunwind
+endif
+
 $(package)_patches=1.0.15-pubkey-validation.diff 1.0.15-signature-validation.diff 1.0.20-immintrin-conflict.diff
 $(package)_config_opts=
 

@@ -1,4 +1,10 @@
-depends_prefix="`dirname ${ac_site_file}`/.."
+# depends_prefix="`dirname ${ac_site_file}`/.."
+
+if test -n "${ac_site_file}"; then
+  depends_prefix="`dirname "${ac_site_file}"`/.."
+else
+  depends_prefix="${PWD}/depends"
+fi
 
 cross_compiling=maybe
 host_alias=@HOST@
@@ -32,11 +38,16 @@ export PKG_CONFIG_LIBDIR=$depends_prefix/lib/pkgconfig
 export PKG_CONFIG_PATH=$depends_prefix/share/pkgconfig
 
 CPPFLAGS="-I$depends_prefix/include/ $CPPFLAGS"
+LDFLAGS="-L$depends_prefix/lib $LDFLAGS"
 
 if test x@host_os@ = xfreebsd; then
-  LDFLAGS="-L$depends_prefix/lib $LDFLAGS -static-libstdc++ -lcxxrt"
+  LDFLAGS="$LDFLAGS -static-libstdc++"
+  LIBS="-lcxxrt $LIBS"
+elif test x@host_os@ = xmingw32; then
+  LIBS="-lc++ -lc++abi -lunwind -lpthread $LIBS"
 else
-  LDFLAGS="-L$depends_prefix/lib $LDFLAGS -static-libstdc++ -lc++abi"
+  LDFLAGS="$LDFLAGS -static-libstdc++"
+  LIBS="-lc++abi $LIBS"
 fi
 
 CC="@CC@"

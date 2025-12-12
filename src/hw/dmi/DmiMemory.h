@@ -22,6 +22,7 @@
 #define XMRIG_DMIMEMORY_H
 
 
+#include <cstdint>
 #include "hw/dmi/String.h"
 
 

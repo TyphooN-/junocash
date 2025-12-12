@@ -1,5 +1,16 @@
 zcash_packages := libsodium rustcxx utfcpp tl_expected
-packages := boost libevent zeromq $(zcash_packages) googletest
+packages :=
+
+# We use a complete SDK for Darwin, which includes libc++.
+ifneq ($(host_os),darwin)
+packages += libcxx
+endif
+
+ifeq ($(host_os),mingw32)
+packages += libunwind
+endif
+
+packages += boost libevent zeromq $(zcash_packages) googletest
 native_packages := native_clang native_ccache native_cmake native_fmt native_rust native_cxxbridge native_xxhash native_zstd
 
 ifeq ($(build_os),linux)
@@ -14,7 +25,17 @@ ifneq ($(build_os),darwin)
 darwin_native_packages=native_cctools
 endif
 
+# Force libcxx and libunwind as dependencies for all other packages on MinGW
+ifeq ($(host_os),mingw32)
+mingw_base_deps := libcxx libunwind
+$(foreach p,$(packages),$(if $(filter $(p),$(mingw_base_deps)),,$(eval $(p)_dependencies += $(mingw_base_deps))))
+endif
+
 # We use a complete SDK for Darwin, which includes libc++.
 ifneq ($(host_os),darwin)
 packages += libcxx
+endif
+
+ifeq ($(host_os),mingw32)
+packages += libunwind
 endif

@@ -7,6 +7,7 @@
 #ifndef BITCOIN_RPC_CLIENT_H
 #define BITCOIN_RPC_CLIENT_H
 
+#include <optional>
 #include <tl/expected.hpp>
 #include <univalue.h>
 #include <variant>
