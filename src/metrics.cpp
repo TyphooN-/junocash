@@ -1174,14 +1174,53 @@ int printWalletStatus()
     lines++;
 
     if (pwalletMain) {
+        // Get transparent (mined) balances
         CAmount immature = pwalletMain->GetImmatureBalance(std::nullopt);
         CAmount mature = pwalletMain->GetBalance(std::nullopt);
+
+        // Get shielded balances from account 0
+        CAmount shieldedBalance = 0;
+        CAmount shieldedUnconfirmed = 0;
+
+        {
+            LOCK2(cs_main, pwalletMain->cs_wallet);
+
+            auto selector = pwalletMain->ZTXOSelectorForAccount(0, false, TransparentCoinbasePolicy::Allow);
+            if (selector.has_value()) {
+                // Get confirmed shielded balance (minconf=1)
+                auto confirmedInputs = pwalletMain->FindSpendableInputs(selector.value(), 1, std::nullopt);
+                for (const auto& t : confirmedInputs.saplingNoteEntries) {
+                    shieldedBalance += t.note.value();
+                }
+                for (const auto& t : confirmedInputs.orchardNoteMetadata) {
+                    shieldedBalance += t.GetNoteValue();
+                }
+
+                // Get unconfirmed shielded balance (minconf=0, then subtract confirmed)
+                auto allInputs = pwalletMain->FindSpendableInputs(selector.value(), 0, std::nullopt);
+                CAmount totalShielded = 0;
+                for (const auto& t : allInputs.saplingNoteEntries) {
+                    totalShielded += t.note.value();
+                }
+                for (const auto& t : allInputs.orchardNoteMetadata) {
+                    totalShielded += t.GetNoteValue();
+                }
+                shieldedUnconfirmed = totalShielded - shieldedBalance;
+            }
+        }
+
         std::string units = Params().CurrencyUnits();
 
-        drawRow("Mature Balance", strprintf("%s %s", FormatMoney(mature), units.c_str()));
+        drawRow("Mined Mature Balance", strprintf("%s %s", FormatMoney(mature), units.c_str()));
         lines++;
-        drawRow("Immature Balance", strprintf("%s %s", FormatMoney(immature), units.c_str()));
+        drawRow("Mined Immature Balance", strprintf("%s %s", FormatMoney(immature), units.c_str()));
         lines++;
+        drawRow("Shielded Balance", strprintf("%s %s", FormatMoney(shieldedBalance), units.c_str()));
+        lines++;
+        if (shieldedUnconfirmed > 0) {
+            drawRow("Shielded Unconfirmed", strprintf("%s %s", FormatMoney(shieldedUnconfirmed), units.c_str()));
+            lines++;
+        }
 
         // Show blocks mined if any
         int blocksMined = minedBlocks.get();
