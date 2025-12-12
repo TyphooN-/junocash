@@ -31,7 +31,8 @@ static const bool DEFAULT_PRINTPRIORITY = false;
 typedef std::variant<
     libzcash::OrchardRawAddress,
     libzcash::SaplingPaymentAddress,
-    boost::shared_ptr<CReserveScript>> MinerAddress;
+    boost::shared_ptr<CReserveScript>,
+    std::string> MinerAddress;
 
 class ExtractMinerAddress
 {
@@ -79,6 +80,9 @@ public:
         // due to some internal error but also if the keypool is empty.
         // In the latter case, already the pointer is NULL.
         return coinbaseScript.get() && !coinbaseScript->reserveScript.empty();
+    }
+    bool operator()(const std::string &p2poolAddress) const {
+        return !p2poolAddress.empty();
     }
 };
 

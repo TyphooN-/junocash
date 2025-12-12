@@ -98,7 +98,8 @@ int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParam
 }
 
 bool IsShieldedMinerAddress(const MinerAddress& minerAddr) {
-    return !std::holds_alternative<boost::shared_ptr<CReserveScript>>(minerAddr);
+    return std::holds_alternative<libzcash::OrchardRawAddress>(minerAddr) ||
+           std::holds_alternative<libzcash::SaplingPaymentAddress>(minerAddr);
 }
 
 class AddOutputsToCoinbaseTxAndSign
@@ -331,6 +332,35 @@ public:
 
         ComputeBindingSig(std::move(saplingBuilder), std::nullopt);
     }
+
+    // Create P2Pool transparent output
+    void operator()(const std::string &p2poolAddress) const {
+        // Add the FR output and fetch the miner's output value.
+        std::array<uint8_t, 32> saplingAnchor;
+        auto saplingBuilder = sapling::new_builder(*chainparams.RustNetwork(), nHeight, saplingAnchor, true);
+
+        auto total_value = SetFoundersRewardAndGetMinerValue(*saplingBuilder);
+
+        KeyIO keyIO(chainparams);
+        auto decoded = keyIO.DecodePaymentAddress(p2poolAddress);
+        CScript p2poolScript;
+
+        if (decoded.has_value() && std::holds_alternative<CKeyID>(decoded.value())) {
+            p2poolScript = GetScriptForDestination(std::get<CKeyID>(decoded.value()));
+        } else {
+            // This case should ideally be caught by IsValidMinerAddress earlier.
+            // If it reaches here, it means a valid-looking P2Pool string couldn't be
+            // decoded into a transparent address. Log and fall back to no output,
+            // or a recoverable error if possible. For now, we'll log and create
+            // an empty script which will likely make the block invalid.
+            LogPrintf("ERROR: Could not decode P2Pool address string '%s' to a transparent address. Creating invalid coinbase.\n", p2poolAddress);
+        }
+        
+        mtx.vout.resize(1);
+        mtx.vout[0] = CTxOut(total_value, p2poolScript);
+
+        ComputeBindingSig(std::move(saplingBuilder), std::nullopt);
+    }
 };
 
 CMutableTransaction CreateCoinbaseTransaction(const CChainParams& chainparams, CAmount nFees, const MinerAddress& minerAddress, int nHeight)
@@ -380,6 +410,7 @@ void BlockAssembler::resetBlock(const MinerAddress& minerAddress)
         [](const libzcash::OrchardRawAddress&) { return 9000; },
         [](const libzcash::SaplingPaymentAddress&) { return 1000; },
         [](const boost::shared_ptr<CReserveScript> &) { return 1000; },
+        [](const std::string &) { return 1000; },
     });
     nBlockSigOps = 100;
 
@@ -821,6 +852,14 @@ void GetMinerAddress(std::optional<MinerAddress> &minerAddress)
         height = chainActive.Height() + 1;
     }
 
+    // Check for -p2pooladdress first
+    auto p2poolAddrArg = GetArg("-p2pooladdress", "");
+    if (!p2poolAddrArg.empty()) {
+        minerAddress = p2poolAddrArg;
+        return;
+    }
+
+    // Fallback to -mineraddress
     auto mAddrArg = GetArg("-mineraddress", "");
     auto zaddr0 = keyIO.DecodePaymentAddress(mAddrArg);
     if (zaddr0.has_value()) {
