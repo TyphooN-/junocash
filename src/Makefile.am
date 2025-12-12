@@ -39,6 +39,9 @@ LIBZCASH=libzcash.a
 WALLET_TOOL_BIN=junocashd-wallet-tool$(EXEEXT)
 WALLET_TOOL_BUILD=$(top_builddir)/target/$(RUST_TARGET)/release/junocashd-wallet-tool$(EXEEXT)
 
+JUNO_P2POOL_BIN=juno-p2pool$(EXEEXT)
+JUNO_P2POOL_BUILD=$(top_builddir)/src/juno-p2pool/build/juno-p2pool$(EXEEXT)
+
 if ENABLE_ZMQ
 LIBBITCOIN_ZMQ=libbitcoin_zmq.a
 endif
@@ -958,6 +961,6 @@ all-local: p2pool-build
 
 p2pool-build:
 	@echo "Building P2Pool..."
-	cd p2pool && git submodule update --init --recursive
-	cd p2pool && mkdir -p build && cd build && cmake .. -DWITH_RANDOMX=OFF && $(MAKE)
-	cp p2pool/build/p2pool $(top_builddir)/src/junocash-p2pool
+	cd juno-p2pool && git submodule update --init --recursive
+	cd juno-p2pool && mkdir -p build && cd build && cmake .. && $(MAKE)
+	cp juno-p2pool/build/juno-p2pool $(top_builddir)/src/junocash-p2pool
