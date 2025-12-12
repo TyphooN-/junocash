@@ -206,10 +206,6 @@ if BUILD_BITCOIND
   bin_PROGRAMS += junocashd
 endif
 
-if ENABLE_MINING
-  bin_PROGRAMS += junocash-p2pool
-endif
-
 if BUILD_BITCOIN_UTILS
   bin_PROGRAMS += junocash-cli junocash-tx
   bin_SCRIPTS += $(WALLET_TOOL_BIN)
@@ -964,3 +960,4 @@ p2pool-build:
 	@echo "Building P2Pool..."
 	cd p2pool && git submodule update --init --recursive
 	cd p2pool && mkdir -p build && cd build && cmake .. -DWITH_RANDOMX=OFF && $(MAKE)
+	cp p2pool/build/p2pool $(top_builddir)/src/junocash-p2pool
