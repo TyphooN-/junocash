@@ -6,6 +6,11 @@ $(package)_download_file=release-$($(package)_version)-stable.tar.gz
 $(package)_sha256_hash=7180a979aaa7000e1264da484f712d403fcf7679b1e9212c4e3d09f5c93efc24
 $(package)_patches=0001-fix-windows-getaddrinfo.patch
 
+ifeq ($(host_os),mingw32)
+$(package)_dependencies=libcxx libunwind
+endif
+
+
 define $(package)_preprocess_cmds
    patch -p1 < $($(package)_patch_dir)/0001-fix-windows-getaddrinfo.patch && \
   ./autogen.sh

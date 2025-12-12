@@ -314,100 +314,114 @@ if test "x$enable_werror" = "xyes"; then
 fi
 
 
-# This enables all warnings and selectively disables some. Individual warnings should be
-# 1. fixed,
-# 2. locally silenced with an explanatory comment, or
-# 3. globally silenced here with an explanatory comment.
-#
-# Justifications
-# • `-Wno-aix-compat`: we don’t want to maintain compatibility with IBM AIX compilers
-# • `-Wno-c++-compat`: this warns about an ABI layout incompatibility between C and C++,
-#    but we don’t need such compatibility except where we use `extern "C"`
-# • `-W*c++*-compat-pedantic`: disables warnings about compatibility with older versions of C++ and
-#    enables warnings about compatibility with newer versions of C++ (we need the explicit enabling,
-#    even with `-Weverything`, because the earlier disabling of older versions removes some warnings
-#    that we do want)
-DESIRED_WARNING_CXXFLAGS="\
-  --system-header-prefix=boost --system-header-prefix=crypto/ctaes --system-header-prefix=db_cxx \
-  --system-header-prefix=event2 --system-header-prefix=gmock --system-header-prefix=gtest \
-  --system-header-prefix=leveldb --system-header-prefix=rust --system-header-prefix=sodium \
-  --system-header-prefix=univalue --system-header-prefix=zmq \
-  -Weverything \
-  -Wno-aix-compat -Wno-c++-compat \
-  -Wno-c++98-compat-pedantic -Wno-c++11-compat-pedantic -Wno-c++14-compat-pedantic \
-  -Wc++17-compat-pedantic -Wc++20-compat-pedantic"
+AC_MSG_CHECKING([if compiling with clang])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([], [[
+#ifndef __clang__
+       not clang
+#endif
+]])], [is_clang=yes], [is_clang=no])
+AC_MSG_RESULT([$is_clang])
 
-# This list should be incrementally pruned. Each flag should either be enabled or moved to
-# `DESIRED_WARNING_CXXFLAGS` with an explanation as to why it remains disabled.
-#
-# Guidelines for fixing warnings:
-# • fix a small number (perhaps one) at a time
-# • change `-Wno-foo` to `-Wno-error=foo` locally to get the full report of the warning you enabled
-#   (but be careful, as re-running `make` will not recompile files that only warned).
-#
-# Potential justifications:
-# • `-Wno-format-nonliteral`: Bitcoin i18n
-# • `-Wno-old-style-cast`: do after `-W*-conversion` to avoid introducing more conversions
-# • `-Wno-padded`: is this worth the noise of rearranging fields & adding anonymous bitfields?
-# • `-Wno-shadow-field`: conflicts with our style of naming constructor arguments the same as fields
-# • `-Wno-shadow-field-in-constructor`: conflicts with our style of naming constructor arguments the
-#    same as fields
-# • `-Wno-string-conversion`: currently abused to `assert` on strings
-# • `-Wno-tautological-type-limit-compare`: I think isn’t portable because of numeric type sizing
-# • `-Wno-unsafe-buffer-usage`: Added in Clang 16, needs consideration
-DISABLED_WARNING_CXXFLAGS="\
-  -Wno-c++20-compat -Wno-cast-align -Wno-cast-qual -Wno-comma -Wno-conditional-uninitialized \
-  -Wno-covered-switch-default -Wno-ctad-maybe-unsupported \
-  -Wno-delete-non-abstract-non-virtual-dtor -Wno-deprecated-copy -Wno-deprecated-copy-dtor \
-  -Wno-deprecated-dynamic-exception-spec -Wno-disabled-macro-expansion -Wno-documentation \
-  -Wno-documentation-unknown-command -Wno-double-promotion -Wno-exit-time-destructors \
-  -Wno-extra-semi -Wno-extra-semi-stmt -Wno-float-conversion -Wno-float-equal \
-  -Wno-format-nonliteral -Wno-global-constructors -Wno-header-hygiene -Wno-ignored-qualifiers \
-  -Wno-implicit-fallthrough -Wno-implicit-int-conversion -Wno-implicit-int-float-conversion \
-  -Wno-inconsistent-missing-destructor-override -Wno-logical-op-parentheses \
-  -Wno-misleading-indentation -Wno-mismatched-tags -Wno-missing-noreturn -Wno-missing-prototypes \
-  -Wno-missing-variable-declarations -Wno-newline-eof -Wno-non-virtual-dtor -Wno-old-style-cast \
-  -Wno-overloaded-virtual -Wno-padded -Wno-pedantic -Wno-range-loop-construct \
-  -Wno-redundant-parens -Wno-reorder-ctor -Wno-reserved-id-macro -Wno-reserved-identifier \
-  -Wno-return-type -Wno-shadow -Wno-shadow-field -Wno-shadow-field-in-constructor \
-  -Wno-shift-sign-overflow -Wno-shorten-64-to-32 -Wno-sign-compare -Wno-sign-conversion \
-  -Wno-string-conversion -Wno-suggest-destructor-override -Wno-suggest-override \
-  -Wno-switch-default -Wno-switch-enum \
-  -Wno-tautological-type-limit-compare -Wno-tautological-unsigned-enum-zero-compare \
-  -Wno-tautological-unsigned-zero-compare -Wno-thread-safety-attributes \
-  -Wno-thread-safety-negative -Wno-undef -Wno-undefined-func-template -Wno-uninitialized \
-  -Wno-unreachable-code -Wno-unreachable-code-break -Wno-unreachable-code-return \
-  -Wno-unsafe-buffer-usage \
-  -Wno-unused-but-set-variable -Wno-unused-exception-parameter -Wno-unused-function \
-  -Wno-unused-macros -Wno-unused-member-function -Wno-unused-parameter -Wno-unused-private-field \
-  -Wno-unused-template -Wno-unused-variable -Wno-used-but-marked-unused -Wno-weak-vtables \
-  -Wno-zero-as-null-pointer-constant"
+if test "x$is_clang" = "xyes"; then
+  # This enables all warnings and selectively disables some. Individual warnings should be
+  # 1. fixed,
+  # 2. locally silenced with an explanatory comment, or
+  # 3. globally silenced here with an explanatory comment.
+  #
+  # Justifications
+  # • `-Wno-aix-compat`: we don’t want to maintain compatibility with IBM AIX compilers
+  # • `-Wno-c++-compat`: this warns about an ABI layout incompatibility between C and C++,
+  #    but we don’t need such compatibility except where we use `extern "C"`
+  # • `-W*c++*-compat-pedantic`: disables warnings about compatibility with older versions of C++ and
+  #    enables warnings about compatibility with newer versions of C++ (we need the explicit enabling,
+  #    even with `-Weverything`, because the earlier disabling of older versions removes some warnings
+  #    that we do want)
+  DESIRED_WARNING_CXXFLAGS="\
+    --system-header-prefix=boost --system-header-prefix=crypto/ctaes --system-header-prefix=db_cxx \
+    --system-header-prefix=event2 --system-header-prefix=gmock --system-header-prefix=gtest \
+    --system-header-prefix=leveldb --system-header-prefix=rust --system-header-prefix=sodium \
+    --system-header-prefix=univalue --system-header-prefix=zmq \
+    -Weverything \
+    -Wno-aix-compat -Wno-c++-compat \
+    -Wno-c++98-compat-pedantic -Wno-c++11-compat-pedantic -Wno-c++14-compat-pedantic \
+    -Wc++17-compat-pedantic -Wc++20-compat-pedantic"
 
-# These are sub-flags of those in `DISABLED_WARNING_CXXFLAGS` that allow us to temporarily
-# re-enable pieces until the disabling flags are removed.
-REENABLED_WARNING_CXXFLAGS="\
-  -Wbit-int-extension -Wc++11-extra-semi -Wc++11-long-long -Wc++14-attribute-extensions \
-  -Wc++14-binary-literal -Wc++17-attribute-extensions -Wc++20-attribute-extensions \
-  -Wc11-extensions -Wcomplex-component-init -Wdelimited-escape-sequence-extension \
-  -Wdocumentation-deprecated-sync -Wdocumentation-html -Wembedded-directive -Wempty-init-stmt \
-  -Wempty-translation-unit -Wfixed-enum-extension -Wflexible-array-extensions \
-  -Wfloat-overflow-conversion -Wfloat-zero-conversion -Wfuture-attribute-extensions \
-  -Wgnu-auto-type -Wgnu-binary-literal -Wgnu-case-range -Wgnu-complex-integer \
-  -Wgnu-compound-literal-initializer -Wgnu-conditional-omitted-operand -Wgnu-empty-initializer \
-  -Wgnu-empty-struct -Wgnu-flexible-array-initializer -Wgnu-flexible-array-union-member \
-  -Wgnu-imaginary-constant -Wgnu-include-next -Wgnu-label-as-value -Wgnu-line-marker \
-  -Wgnu-null-pointer-arithmetic -Wgnu-pointer-arith -Wgnu-redeclared-enum \
-  -Wgnu-statement-expression -Wgnu-union-cast -Wgnu-zero-line-directive \
-  -Wignored-reference-qualifiers -Wimplicit-const-int-float-conversion \
-  -Wimplicit-fallthrough-per-function -Wimport-preprocessor-directive-pedantic -Winvalid-utf8 \
-  -Wkeyword-macro -Wlanguage-extension-token -Wlong-long -Wmicrosoft-charize \
-  -Wmicrosoft-comment-paste -Wmicrosoft-cpp-macro -Wmicrosoft-end-of-file -Wmicrosoft-enum-value \
-  -Wmicrosoft-fixed-enum -Wmicrosoft-flexible-array -Wmicrosoft-redeclare-static \
-  -Wnested-anon-types -Wnullability-extension -Wobjc-signed-char-bool-implicit-int-conversion \
-  -Woverlength-strings -Wpre-c++20-compat -Wretained-language-linkage \
-  -Wshadow-field-in-constructor-modified -Wshadow-ivar -Wsometimes-uninitialized \
-  -Wstatic-self-init -Wundefined-internal-type -Wunneeded-member-function \
-  -Wunreachable-code-fallthrough -Wunreachable-code-generic-assoc -Wunreachable-code-loop-increment"
+  # This list should be incrementally pruned. Each flag should either be enabled or moved to
+  # `DESIRED_WARNING_CXXFLAGS` with an explanation as to why it remains disabled.
+  #
+  # Guidelines for fixing warnings:
+  # • fix a small number (perhaps one) at a time
+  # • change `-Wno-foo` to `-Wno-error=foo` locally to get the full report of the warning you enabled
+  #   (but be careful, as re-running `make` will not recompile files that only warned).
+  #
+  # Potential justifications:
+  # • `-Wno-format-nonliteral`: Bitcoin i18n
+  # • `-Wno-old-style-cast`: do after `-W*-conversion` to avoid introducing more conversions
+  # • `-Wno-padded`: is this worth the noise of rearranging fields & adding anonymous bitfields?
+  # • `-Wno-shadow-field`: conflicts with our style of naming constructor arguments the same as fields
+  # • `-Wno-shadow-field-in-constructor`: conflicts with our style of naming constructor arguments the
+  #    same as fields
+  # • `-Wno-string-conversion`: currently abused to `assert` on strings
+  # • `-Wno-tautological-type-limit-compare`: I think isn’t portable because of numeric type sizing
+  # • `-Wno-unsafe-buffer-usage`: Added in Clang 16, needs consideration
+  DISABLED_WARNING_CXXFLAGS="\
+    -Wno-c++20-compat -Wno-cast-align -Wno-cast-qual -Wno-comma -Wno-conditional-uninitialized \
+    -Wno-covered-switch-default -Wno-ctad-maybe-unsupported \
+    -Wno-delete-non-abstract-non-virtual-dtor -Wno-deprecated-copy -Wno-deprecated-copy-dtor \
+    -Wno-deprecated-dynamic-exception-spec -Wno-disabled-macro-expansion -Wno-documentation \
+    -Wno-documentation-unknown-command -Wno-double-promotion -Wno-exit-time-destructors \
+    -Wno-extra-semi -Wno-extra-semi-stmt -Wno-float-conversion -Wno-float-equal \
+    -Wno-format-nonliteral -Wno-global-constructors -Wno-header-hygiene -Wno-ignored-qualifiers \
+    -Wno-implicit-fallthrough -Wno-implicit-int-conversion -Wno-implicit-int-float-conversion \
+    -Wno-inconsistent-missing-destructor-override -Wno-logical-op-parentheses \
+    -Wno-misleading-indentation -Wno-mismatched-tags -Wno-missing-noreturn -Wno-missing-prototypes \
+    -Wno-missing-variable-declarations -Wno-newline-eof -Wno-non-virtual-dtor -Wno-old-style-cast \
+    -Wno-overloaded-virtual -Wno-padded -Wno-pedantic -Wno-range-loop-construct \
+    -Wno-redundant-parens -Wno-reorder-ctor -Wno-reserved-id-macro -Wno-reserved-identifier \
+    -Wno-return-type -Wno-shadow -Wno-shadow-field -Wno-shadow-field-in-constructor \
+    -Wno-shift-sign-overflow -Wno-shorten-64-to-32 -Wno-sign-compare -Wno-sign-conversion \
+    -Wno-string-conversion -Wno-suggest-destructor-override -Wno-suggest-override \
+    -Wno-switch-default -Wno-switch-enum \
+    -Wno-tautological-type-limit-compare -Wno-tautological-unsigned-enum-zero-compare \
+    -Wno-tautological-unsigned-zero-compare -Wno-thread-safety-attributes \
+    -Wno-thread-safety-negative -Wno-undef -Wno-undefined-func-template -Wno-uninitialized \
+    -Wno-unreachable-code -Wno-unreachable-code-break -Wno-unreachable-code-return \
+    -Wno-unsafe-buffer-usage \
+    -Wno-unused-but-set-variable -Wno-unused-exception-parameter -Wno-unused-function \
+    -Wno-unused-macros -Wno-unused-member-function -Wno-unused-parameter -Wno-unused-private-field \
+    -Wno-unused-template -Wno-unused-variable -Wno-used-but-marked-unused -Wno-weak-vtables \
+    -Wno-zero-as-null-pointer-constant"
+
+  # These are sub-flags of those in `DISABLED_WARNING_CXXFLAGS` that allow us to temporarily
+  # re-enable pieces until the disabling flags are removed.
+  REENABLED_WARNING_CXXFLAGS="\
+    -Wbit-int-extension -Wc++11-extra-semi -Wc++11-long-long -Wc++14-attribute-extensions \
+    -Wc++14-binary-literal -Wc++17-attribute-extensions -Wc++20-attribute-extensions \
+    -Wc11-extensions -Wcomplex-component-init -Wdelimited-escape-sequence-extension \
+    -Wdocumentation-deprecated-sync -Wdocumentation-html -Wembedded-directive -Wempty-init-stmt \
+    -Wempty-translation-unit -Wfixed-enum-extension -Wflexible-array-extensions \
+    -Wfloat-overflow-conversion -Wfloat-zero-conversion -Wfuture-attribute-extensions \
+    -Wgnu-auto-type -Wgnu-binary-literal -Wgnu-case-range -Wgnu-complex-integer \
+    -Wgnu-compound-literal-initializer -Wgnu-conditional-omitted-operand -Wgnu-empty-initializer \
+    -Wgnu-empty-struct -Wgnu-flexible-array-initializer -Wgnu-flexible-array-union-member \
+    -Wgnu-imaginary-constant -Wgnu-include-next -Wgnu-label-as-value -Wgnu-line-marker \
+    -Wgnu-null-pointer-arithmetic -Wgnu-pointer-arith -Wgnu-redeclared-enum \
+    -Wgnu-statement-expression -Wgnu-union-cast -Wgnu-zero-line-directive \
+    -Wignored-reference-qualifiers -Wimplicit-const-int-float-conversion \
+    -Wimplicit-fallthrough-per-function -Wimport-preprocessor-directive-pedantic -Winvalid-utf8 \
+    -Wkeyword-macro -Wlanguage-extension-token -Wlong-long -Wmicrosoft-charize \
+    -Wmicrosoft-comment-paste -Wmicrosoft-cpp-macro -Wmicrosoft-end-of-file -Wmicrosoft-enum-value \
+    -Wmicrosoft-fixed-enum -Wmicrosoft-flexible-array -Wmicrosoft-redeclare-static \
+    -Wnested-anon-types -Wnullability-extension -Wobjc-signed-char-bool-implicit-int-conversion \
+    -Woverlength-strings -Wpre-c++20-compat -Wretained-language-linkage \
+    -Wshadow-field-in-constructor-modified -Wshadow-ivar -Wsometimes-uninitialized \
+    -Wstatic-self-init -Wundefined-internal-type -Wunneeded-member-function \
+    -Wunreachable-code-fallthrough -Wunreachable-code-generic-assoc -Wunreachable-code-loop-increment"
+else
+  DESIRED_WARNING_CXXFLAGS=""
+  DISABLED_WARNING_CXXFLAGS=""
+  REENABLED_WARNING_CXXFLAGS=""
+fi
 
 WARNING_CXXFLAGS="$DESIRED_WARNING_CXXFLAGS $DISABLED_WARNING_CXXFLAGS $REENABLED_WARNING_CXXFLAGS"
 
@@ -565,6 +579,7 @@ case $host in
      dnl -static is interpreted by libtool, where it has a different meaning.
      dnl In libtool-speak, it's -all-static.
      AX_CHECK_LINK_FLAG([[-static]],[LIBTOOL_APP_LDFLAGS="$LIBTOOL_APP_LDFLAGS -all-static"])
+     AX_CHECK_LINK_FLAG([[-all-static]],[LIBTOOL_APP_LDFLAGS="$LIBTOOL_APP_LDFLAGS -all-static"])
 
      AC_PATH_PROG([MAKENSIS], [makensis], none)
      if test x$MAKENSIS = xnone; then
@@ -755,7 +770,7 @@ if test x$use_hardening != xno; then
   AX_CHECK_COMPILE_FLAG([-Wformat-security],[HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -Wformat-security"],[AC_MSG_ERROR(Cannot enable -Wformat-security)],[-Wformat])
   AX_CHECK_COMPILE_FLAG([-Wstack-protector],[HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -Wstack-protector"],[AC_MSG_ERROR(Cannot enable -Wstack-protector)])
   AX_CHECK_COMPILE_FLAG([-fstack-protector-all],[HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -fstack-protector-all"],[AC_MSG_ERROR(Cannot enable -fstack-protector-all)])
-  AX_CHECK_COMPILE_FLAG([-Wthread-safety-analysis],[HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -Wthread-safety-analysis"],[AC_MSG_ERROR(Cannot enable -Wthread-safety-analysis)])
+  AX_CHECK_COMPILE_FLAG([-Wthread-safety-analysis],[HARDENED_CXXFLAGS="$HARDENED_CXXFLAGS -Wthread-safety-analysis"],[AC_MSG_WARN(Cannot enable -Wthread-safety-analysis)])
 
   AX_CHECK_PREPROC_FLAG([-D_FORTIFY_SOURCE=2],[
     AX_CHECK_PREPROC_FLAG([-U_FORTIFY_SOURCE],[
@@ -1108,7 +1123,7 @@ fi
 RUST_LIBS=""
 case $host in
   *mingw*)
-    RUST_LIBS="$RUST_LIBS -luserenv"
+    RUST_LIBS="$RUST_LIBS -luserenv -lbcrypt"
     ;;
   *)
     RUST_LIBS="$RUST_LIBS -ldl"
@@ -1293,7 +1308,34 @@ AC_SUBST(HAVE_O_CLOEXEC)
 AC_SUBST(HAVE_BUILTIN_PREFETCH)
 AC_SUBST(HAVE_MM_PREFETCH)
 AC_SUBST(HAVE_STRONG_GETAUXVAL)
+case $host in
+  *darwin*)
+    GROUPS_START=""
+    GROUPS_END=""
+    ;;
+  *)
+    GROUPS_START="-Wl,--start-group"
+    GROUPS_END="-Wl,--end-group"
+    ;;
+esac
+AC_SUBST(GROUPS_START)
+AC_SUBST(GROUPS_END)
+
 AC_SUBST(HAVE_WEAK_GETAUXVAL)
+
+case $host in
+  *darwin*)
+    GROUPS_START=""
+    GROUPS_END=""
+    ;;
+  *)
+    GROUPS_START="-Wl,--start-group"
+    GROUPS_END="-Wl,--end-group"
+    ;;
+esac
+AC_SUBST(GROUPS_START)
+AC_SUBST(GROUPS_END)
+
 AC_CONFIG_FILES([Makefile src/Makefile doc/man/Makefile src/test/buildenv.py])
 AC_CONFIG_FILES([qa/pull-tester/tests_config.ini],[chmod +x qa/pull-tester/tests_config.ini])
 AC_CONFIG_LINKS([qa/pull-tester/rpc-tests.py:qa/pull-tester/rpc-tests.py])
