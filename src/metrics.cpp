@@ -6,6 +6,7 @@
 #include "metrics.h"
 
 #include "chainparams.h"
+#include "chainparamsbase.h"
 #include "init.h"
 #include "key_io.h"
 #include "checkpoints.h"
@@ -2117,7 +2118,7 @@ static void toggleP2PoolMode()
         config.binaryPath = GetP2PoolBinaryPath();
         config.walletAddress = addr;
         config.host = "127.0.0.1";
-        config.rpcPort = GetArg("-rpcport", 8232);
+        config.rpcPort = GetArg("-rpcport", BaseParams().RPCPort());
         config.lightMode = GetBoolArg("-p2poollightmode", false);
         config.rpcUser = GetArg("-rpcuser", "");
         config.rpcPassword = GetArg("-rpcpassword", "");
