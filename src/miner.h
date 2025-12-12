@@ -60,6 +60,7 @@ public:
     void operator()(const boost::shared_ptr<CReserveScript> &coinbaseScript) const {
         coinbaseScript->KeepScript();
     }
+    void operator()(const std::string &p2poolAddress) const {}
 };
 
 bool IsShieldedMinerAddress(const MinerAddress& minerAddr);
