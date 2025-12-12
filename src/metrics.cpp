@@ -178,6 +178,12 @@ static std::atomic<int64_t> lastBlockFoundTime(0);  // Timestamp when last block
 static std::atomic<int> lastBlockFoundHeight(0);    // Height of last block we found
 static std::atomic<double> lastBlockLuckPercent(0.0);  // Luck % for last found block
 
+// P2Pool share tracking
+static std::atomic<int64_t> lastP2PoolShareTime(0);  // Timestamp when last P2Pool share was found
+static std::atomic<int64_t> prevP2PoolShareTime(0);  // Previous share timestamp (for luck calculation)
+static std::atomic<double> lastP2PoolShareLuck(0.0); // Luck % for last found share
+static std::atomic<double> p2poolExpectedShareTime(0.0); // Expected share time at time of last share
+
 // Historical difficulty tracking for meter visualization
 static std::atomic<double> difficultyHistoricalHigh(0.0);
 static std::atomic<double> difficultyHistoricalLow(0.0);
@@ -585,6 +591,35 @@ void RecordBlockFound(int64_t timeMining, double difficulty, double hashrate)
                   DisplayDuration(expectedTime, DurationFormat::REDUCED).c_str(),
                   DisplayDuration(timeMining, DurationFormat::REDUCED).c_str());
     }
+}
+
+// Record when a P2Pool share is found for luck calculation
+void RecordP2PoolShare(double shareDifficulty, double hashrate)
+{
+    int64_t now = GetTime();
+    int64_t prevShare = lastP2PoolShareTime.load();
+
+    // Calculate luck if we have a previous share
+    if (prevShare > 0 && hashrate > 0 && shareDifficulty > 0) {
+        int64_t actualTime = now - prevShare;
+        double expectedTime = shareDifficulty / hashrate;
+
+        if (actualTime > 0 && expectedTime > 0) {
+            // Luck = expected time / actual time * 100
+            double luckPercent = (expectedTime / actualTime) * 100.0;
+            lastP2PoolShareLuck = luckPercent;
+
+            LogPrintf("P2Pool share found! Luck: %.1f%% (expected %s, actual %s)\n",
+                      luckPercent,
+                      DisplayDuration(expectedTime, DurationFormat::REDUCED).c_str(),
+                      DisplayDuration(actualTime, DurationFormat::REDUCED).c_str());
+        }
+    }
+
+    // Update timestamps
+    prevP2PoolShareTime = prevShare;  // Store previous for next calculation
+    lastP2PoolShareTime = now;
+    p2poolExpectedShareTime = (hashrate > 0 && shareDifficulty > 0) ? (shareDifficulty / hashrate) : 0;
 }
 
 // Set mining start time (called when mining begins)
@@ -1656,11 +1691,37 @@ int printMiningStatus(bool mining)
 
                 // Estimated share time (if we have hashrate and share difficulty)
                 double currentHashrate = GetLocalSolPS();
+                double expectedShareTime = 0;
                 if (currentHashrate > 0 && p2status.shareDifficulty > 0) {
                     // Expected time to find a share = shareDifficulty / hashrate
-                    double expectedShareTime = (double)p2status.shareDifficulty / currentHashrate;
+                    expectedShareTime = (double)p2status.shareDifficulty / currentHashrate;
                     std::string expectedShareStr = DisplayDuration(expectedShareTime, DurationFormat::FULL);
                     drawRow("Est. Share Time", expectedShareStr);
+                    lines++;
+                }
+
+                // Last share luck (if we have previous share data)
+                if (lastP2PoolShareLuck.load() > 0) {
+                    double luck = lastP2PoolShareLuck.load();
+                    std::string luckColor;
+                    if (luck < 100) {
+                        luckColor = "\e[1;32m";  // Green for lucky (faster than expected)
+                    } else if (luck < 150) {
+                        luckColor = "\e[1;33m";  // Yellow for average
+                    } else {
+                        luckColor = "\e[1;31m";  // Red for unlucky (slower than expected)
+                    }
+                    drawRow("Last Share Luck", strprintf("%s%.1f%%\e[0m", luckColor.c_str(), luck));
+                    lines++;
+                }
+
+                // Current share progress (if we have expected time and last share)
+                if (expectedShareTime > 0 && p2status.lastShareTimestamp > 0) {
+                    int64_t timeSinceShare = GetTime() - p2status.lastShareTimestamp;
+                    double progressPercent = (timeSinceShare / expectedShareTime) * 100.0;
+                    if (progressPercent > 999) progressPercent = 999;  // Cap at 999%
+
+                    drawProgressRow(progressPercent, timeSinceShare);
                     lines++;
                 }
             }

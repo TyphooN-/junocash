@@ -1145,10 +1145,17 @@ void static P2PoolMiner(const std::string& url, const std::string& address, int 
                       std::vector<unsigned char> fullHeader;
                       fullHeader.insert(fullHeader.end(), headerBytes.begin(), headerBytes.end());
                       fullHeader.insert(fullHeader.end(), noncePrev, noncePrev + 32);
-                      
+
                       std::string submitHex = HexStr(fullHeader);
                       LogPrintf("P2PoolMiner: Found share! %s\n", submitHex.substr(0, 16));
                       client.SubmitShare(submitHex);
+
+                      // Record share for luck tracking
+                      // Calculate share difficulty from target
+                      arith_uint256 maxTarget = UintToArith256(uint256S("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"));
+                      double shareDifficulty = (double)maxTarget.getdouble() / (double)hashTarget.getdouble();
+                      double currentHashrate = GetLocalSolPS();
+                      RecordP2PoolShare(shareDifficulty, currentHashrate);
                  }
                  
                  memcpy(noncePrev, nonce, 32);
