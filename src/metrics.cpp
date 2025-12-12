@@ -2096,8 +2096,8 @@ static void toggleP2PoolMode()
                     if (addrPair) {
                         KeyIO keyIO(Params());
                         addr = keyIO.EncodePaymentAddress(addrPair->first);
-                        std::cout << "Auto-generated unified address for P2Pool mining" << std::endl << std::flush;
-                        LogPrintf("P2Pool: Auto-generated unified address for mining\n");
+                        std::cout << "Auto-generated address for P2Pool mining" << std::endl << std::flush;
+                        LogPrintf("P2Pool: Auto-generated address for mining\n");
                     }
                 }
 #endif
@@ -2105,10 +2105,9 @@ static void toggleP2PoolMode()
         }
 
         if (addr.empty()) {
-            std::cout << "Error: No P2Pool-compatible address configured." << std::endl;
-            std::cout << "P2Pool requires a unified or shielded address." << std::endl;
+            std::cout << "Error: No address configured for P2Pool mining." << std::endl;
             std::cout << "Set -p2pooladdress or -mineraddress in junocash.conf" << std::endl;
-            std::cout << "Generate a unified address with: junocash-cli z_getaddressforaccount 0" << std::endl << std::flush;
+            std::cout << "You can use any valid JunoCash address (transparent, shielded, or unified)." << std::endl << std::flush;
             MilliSleep(3000);
             return;
         }
