@@ -1601,6 +1601,44 @@ int printMiningStatus(bool mining)
             drawRow("Mining Mode", miningMode);
             lines++;
 
+            // Show P2Pool statistics if in P2Pool mode
+            bool p2poolMode = !GetArg("-p2poolurl", "").empty() && !GetArg("-p2pooladdress", "").empty();
+            if (p2poolMode) {
+                P2PoolStatus p2status = P2PoolStatusMonitor::GetInstance().GetStatus();
+
+                // P2Pool connection status
+                std::string connStatus = p2status.connected ?
+                    "\e[1;32m● Connected\e[0m" : "\e[1;31m○ Disconnected\e[0m";
+                drawRow("P2Pool Status", connStatus);
+                lines++;
+
+                // Shares submitted
+                if (p2status.totalShares > 0) {
+                    drawRow("Shares Found", strprintf("%lu", p2status.totalShares));
+                    lines++;
+                }
+
+                // Pool hashrate (if available)
+                if (p2status.poolHashrate > 0) {
+                    std::string poolHashStr;
+                    if (p2status.poolHashrate >= 1000000) {
+                        poolHashStr = strprintf("%.2f MH/s", p2status.poolHashrate / 1000000);
+                    } else if (p2status.poolHashrate >= 1000) {
+                        poolHashStr = strprintf("%.2f kH/s", p2status.poolHashrate / 1000);
+                    } else {
+                        poolHashStr = strprintf("%.2f H/s", p2status.poolHashrate);
+                    }
+                    drawRow("Pool Hashrate", poolHashStr);
+                    lines++;
+                }
+
+                // Connected miners (if available)
+                if (p2status.connectedMiners > 0) {
+                    drawRow("Pool Miners", strprintf("%d", p2status.connectedMiners));
+                    lines++;
+                }
+            }
+
             // Show mining probability and expected time to find block
             if (!benchmarkMode.load()) {
                 double currentHashrate = GetLocalSolPS();
