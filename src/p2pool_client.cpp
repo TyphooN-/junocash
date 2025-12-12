@@ -171,16 +171,54 @@ std::optional<P2PoolClient::BlockTemplate> P2PoolClient::GetBlockTemplate() {
     }
 }
 
-bool P2PoolClient::SubmitShare(const std::string& header_hex) {
+P2PoolClient::ShareResult P2PoolClient::SubmitShare(const std::string& header_hex) {
     try {
         UniValue params(UniValue::VARR);
         params.push_back(header_hex);
         params.push_back(m_address);
-        
+
         UniValue result = CallMethod("submit_share", params);
-        return true; // If no exception, success
+
+        // Parse response to determine status
+        ShareResult shareResult;
+
+        if (result.isObject()) {
+            // Check for "status" field
+            if (result.exists("status")) {
+                std::string status = result["status"].get_str();
+                std::string message = result.exists("message") ? result["message"].get_str() : "";
+
+                if (status == "accepted") {
+                    shareResult.status = ShareStatus::Accepted;
+                    shareResult.message = message.empty() ? "Share accepted" : message;
+                } else if (status == "rejected") {
+                    shareResult.status = ShareStatus::Rejected;
+                    shareResult.message = message.empty() ? "Share rejected" : message;
+                } else if (status == "stale") {
+                    shareResult.status = ShareStatus::Stale;
+                    shareResult.message = message.empty() ? "Share stale" : message;
+                } else {
+                    shareResult.status = ShareStatus::Accepted; // Default to accepted
+                    shareResult.message = "Share submitted";
+                }
+            } else {
+                // No status field, assume accepted
+                shareResult.status = ShareStatus::Accepted;
+                shareResult.message = "Share accepted";
+            }
+        } else if (result.isBool() && result.get_bool()) {
+            // Boolean true response means accepted
+            shareResult.status = ShareStatus::Accepted;
+            shareResult.message = "Share accepted";
+        } else {
+            // Assume success if we got a response
+            shareResult.status = ShareStatus::Accepted;
+            shareResult.message = "Share submitted";
+        }
+
+        return shareResult;
     } catch (const std::exception& e) {
         LogPrintf("P2PoolClient::SubmitShare error: %s\n", e.what());
-        return false;
+        return {ShareStatus::Error, std::string("Error: ") + e.what()};
     }
 }

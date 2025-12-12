@@ -184,6 +184,12 @@ static std::atomic<int64_t> prevP2PoolShareTime(0);  // Previous share timestamp
 static std::atomic<double> lastP2PoolShareLuck(0.0); // Luck % for last found share
 static std::atomic<double> p2poolExpectedShareTime(0.0); // Expected share time at time of last share
 
+// P2Pool share acceptance tracking
+static std::atomic<uint64_t> p2poolSharesAccepted(0);
+static std::atomic<uint64_t> p2poolSharesRejected(0);
+static std::atomic<uint64_t> p2poolSharesStale(0);
+static std::atomic<uint64_t> p2poolSharesError(0);
+
 // Historical difficulty tracking for meter visualization
 static std::atomic<double> difficultyHistoricalHigh(0.0);
 static std::atomic<double> difficultyHistoricalLow(0.0);
@@ -620,6 +626,20 @@ void RecordP2PoolShare(double shareDifficulty, double hashrate)
     prevP2PoolShareTime = prevShare;  // Store previous for next calculation
     lastP2PoolShareTime = now;
     p2poolExpectedShareTime = (hashrate > 0 && shareDifficulty > 0) ? (shareDifficulty / hashrate) : 0;
+}
+
+// Record P2Pool share acceptance status
+void RecordP2PoolShareStatus(bool accepted, bool rejected, bool stale, bool error)
+{
+    if (accepted) {
+        p2poolSharesAccepted++;
+    } else if (rejected) {
+        p2poolSharesRejected++;
+    } else if (stale) {
+        p2poolSharesStale++;
+    } else if (error) {
+        p2poolSharesError++;
+    }
 }
 
 // Set mining start time (called when mining begins)
@@ -1649,6 +1669,34 @@ int printMiningStatus(bool mining)
                 // Shares submitted
                 if (p2status.totalShares > 0) {
                     drawRow("Shares Found", strprintf("%lu", p2status.totalShares));
+                    lines++;
+                }
+
+                // Share acceptance stats (if any shares submitted)
+                uint64_t totalLocal = p2poolSharesAccepted.load() + p2poolSharesRejected.load() +
+                                     p2poolSharesStale.load() + p2poolSharesError.load();
+                if (totalLocal > 0) {
+                    uint64_t accepted = p2poolSharesAccepted.load();
+                    uint64_t rejected = p2poolSharesRejected.load();
+                    uint64_t stale = p2poolSharesStale.load();
+                    uint64_t errors = p2poolSharesError.load();
+
+                    // Calculate acceptance rate
+                    double acceptRate = (totalLocal > 0) ? (accepted * 100.0 / totalLocal) : 0.0;
+
+                    // Build status string with color coding
+                    std::string shareStatus;
+                    if (acceptRate >= 95.0) {
+                        shareStatus = strprintf("\e[1;32m%lu\e[0m/%lu/%lu/%lu (\e[1;32m%.1f%%\e[0m)",
+                                               accepted, rejected, stale, errors, acceptRate);
+                    } else if (acceptRate >= 80.0) {
+                        shareStatus = strprintf("\e[1;33m%lu\e[0m/%lu/%lu/%lu (\e[1;33m%.1f%%\e[0m)",
+                                               accepted, rejected, stale, errors, acceptRate);
+                    } else {
+                        shareStatus = strprintf("\e[1;31m%lu\e[0m/%lu/%lu/%lu (\e[1;31m%.1f%%\e[0m)",
+                                               accepted, rejected, stale, errors, acceptRate);
+                    }
+                    drawRow("Shares (A/R/S/E)", shareStatus);
                     lines++;
                 }
 

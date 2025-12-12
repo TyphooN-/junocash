@@ -18,11 +18,23 @@ public:
         std::string target;
     };
 
+    enum class ShareStatus {
+        Accepted,
+        Rejected,
+        Stale,
+        Error
+    };
+
+    struct ShareResult {
+        ShareStatus status;
+        std::string message;
+    };
+
     // Fetches a new block template from the P2Pool node
     std::optional<BlockTemplate> GetBlockTemplate();
 
     // Submits a found share to the P2Pool node
-    bool SubmitShare(const std::string& header_hex);
+    ShareResult SubmitShare(const std::string& header_hex);
 
 private:
     std::string m_url;

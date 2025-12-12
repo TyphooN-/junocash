@@ -82,6 +82,7 @@ void TrackMinedBlock(uint256 hash);
 void RecordBlockFound(int64_t timeMining, double difficulty, double hashrate);
 void SetMiningStartTime();
 void RecordP2PoolShare(double shareDifficulty, double hashrate);
+void RecordP2PoolShareStatus(bool accepted, bool rejected, bool stale, bool error);
 
 void MarkStartTime();
 double GetLocalSolPS();

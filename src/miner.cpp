@@ -1148,7 +1148,9 @@ void static P2PoolMiner(const std::string& url, const std::string& address, int 
 
                       std::string submitHex = HexStr(fullHeader);
                       LogPrintf("P2PoolMiner: Found share! %s\n", submitHex.substr(0, 16));
-                      client.SubmitShare(submitHex);
+
+                      // Submit share and get result
+                      auto shareResult = client.SubmitShare(submitHex);
 
                       // Record share for luck tracking
                       // Calculate share difficulty from target
@@ -1156,6 +1158,24 @@ void static P2PoolMiner(const std::string& url, const std::string& address, int 
                       double shareDifficulty = (double)maxTarget.getdouble() / (double)hashTarget.getdouble();
                       double currentHashrate = GetLocalSolPS();
                       RecordP2PoolShare(shareDifficulty, currentHashrate);
+
+                      // Record share status
+                      bool accepted = (shareResult.status == P2PoolClient::ShareStatus::Accepted);
+                      bool rejected = (shareResult.status == P2PoolClient::ShareStatus::Rejected);
+                      bool stale = (shareResult.status == P2PoolClient::ShareStatus::Stale);
+                      bool error = (shareResult.status == P2PoolClient::ShareStatus::Error);
+                      RecordP2PoolShareStatus(accepted, rejected, stale, error);
+
+                      // Log result
+                      if (accepted) {
+                          LogPrintf("P2PoolMiner: Share accepted\n");
+                      } else if (rejected) {
+                          LogPrintf("P2PoolMiner: Share rejected - %s\n", shareResult.message.c_str());
+                      } else if (stale) {
+                          LogPrintf("P2PoolMiner: Share stale - %s\n", shareResult.message.c_str());
+                      } else {
+                          LogPrintf("P2PoolMiner: Share submission error - %s\n", shareResult.message.c_str());
+                      }
                  }
                  
                  memcpy(noncePrev, nonce, 32);
