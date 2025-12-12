@@ -1498,12 +1498,12 @@ int printMiningStatus(bool mining)
                 if (lastBlockFoundTime.load() > 0 && lastBlockLuckPercent.load() > 0) {
                     double luck = lastBlockLuckPercent.load();
                     std::string luckColor;
-                    if (luck >= 100) {
-                        luckColor = "\e[1;32m";  // Green for lucky (less time than expected)
-                    } else if (luck >= 50) {
-                        luckColor = "\e[1;33m";  // Orange for average
+                    if (luck < 100) {
+                        luckColor = "\e[1;32m";  // Green for lucky (faster than expected)
+                    } else if (luck < 150) {
+                        luckColor = "\e[1;33m";  // Orange for average (around expected)
                     } else {
-                        luckColor = "\e[1;31m";  // Red for unlucky (more time than expected)
+                        luckColor = "\e[1;31m";  // Red for unlucky (slower than expected)
                     }
                     drawRow("Last Block Luck", strprintf("%s%.1f%%\e[0m", luckColor.c_str(), luck));
                     lines++;
