@@ -1602,7 +1602,6 @@ int printMiningStatus(bool mining)
             lines++;
 
             // Show P2Pool statistics if in P2Pool mode
-            bool p2poolMode = !GetArg("-p2poolurl", "").empty() && !GetArg("-p2pooladdress", "").empty();
             if (p2poolMode) {
                 P2PoolStatus p2status = P2PoolStatusMonitor::GetInstance().GetStatus();
 
